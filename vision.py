@@ -35,12 +35,32 @@ def get_image():
 '''
 
 '''
-def get_homography_from_aruco(frame, aruco_dict=cv2.aruco.DICT_4X4_50):
+
+def get_fram_from_aruco(frame) : 
+
+    # Convert the image to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    dictionary = cv2.aruco.getPredefinedDictionary(aruco_dict)
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     parameters = cv2.aruco.DetectorParameters()
 
-    detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+    # Create the ArUco detector
+    detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
+    # Detect the markers
+    corners, ids, rejected = detector.detectMarkers(gray)
+    # Print the detected markers
+    print("Detected markers:", ids)
+    print("Corners:", corners)
+
+    if ids is not None:
+        cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+        cv2.imshow('Detected Markers', frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+def get_homography_from_aruco(frame, aruco_dict=cv2.aruco.DICT_4X4_50):
+    
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    detector = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(aruco_dict), cv2.aruco.DetectorParameters())
     corners, ids, _ = detector.detectMarkers(gray)
 
     if ids is None or len(ids) < 4:
@@ -169,6 +189,7 @@ def detect_robot_orientation():
 #test
 grid = get_grid(20, 20)
 x, y, angle = detect_robot_orientation()
+get_fram_from_aruco()
 
 print(grid)
 print(f"X = {x} and y = {y} and angle = {angle}")
