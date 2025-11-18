@@ -20,7 +20,11 @@ def get_image():
         raise Exception("Unable to capture the image")
 
     # Display the image
-    #cv2.imshow("Captured image", frame)
+    cv2.imshow("Captured image", frame)
+
+    # Attend une touche puis ferme
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     # Release the camera
     cap.release()
@@ -63,7 +67,7 @@ def get_homography_from_aruco(frame, aruco_dict=cv2.aruco.DICT_4X4_50):
     return H
 
 '''
-
+Correction of the image
 '''
 def warp_map(frame, H):
     warped = cv2.warpPerspective(frame, H, (500, 700))
