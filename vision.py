@@ -113,7 +113,7 @@ def vision_loop(acquisition_delay):
 '''
 
 '''
-
+# Function de https://www.geeksforgeeks.org/computer-vision/detecting-aruco-markers-with-opencv-and-python-1/
 def get_fram_from_aruco(frame) : 
 
     # Convert the image to grayscale
