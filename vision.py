@@ -11,6 +11,13 @@ class Vision:
         self._grid = None      # protected
         self.__secret = 42     # private
         '''
+        #Variables for Vision
+        self.grid = None 
+        self.thymio_size = None 
+        self.thymio_pos = None
+        self.cell_size = None 
+        self.goal = None
+
         # Open camera (0 = first camera USB detected)
         self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
 
