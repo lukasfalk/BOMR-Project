@@ -95,12 +95,14 @@ def warp_map(frame, H):
 
 
 '''
-Create and send the grid for the beginning (i.e. before pathfinding)
+Create and send the grid for the beginning (before pathfinding)
 
-zero means black -> wall
-one means white -> road
-If a cell is on both -> becomes a wall
+0 = black = wall
+1 = white = road
+Cell has white and black is categorised like a wall
+
 '''
+
 def get_grid(grid_Nx,grid_Ny):
     #Get the corners -> tags
     grid = np.zeros((grid_Nx, grid_Ny), dtype=int)
