@@ -8,7 +8,7 @@ def generating_markers() :
     print("test")
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     # Générer les 4 markers pour les coins de la map (5x5 cm à imprimer)
-    for marker_id in range(4):
+    for marker_id in range(6):
         marker = cv2.aruco.generateImageMarker(aruco_dict, marker_id, 200)
         cv2.imwrite(f'vision_markers/marker_corner_{marker_id}.png', marker)
         print(f"✓ Marker coin {marker_id} généré")
