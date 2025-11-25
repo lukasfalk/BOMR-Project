@@ -14,6 +14,7 @@ class Vision:
         '''
         # Open camera (0 = first camera USB detected)
         self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
+        self.__goal_end = np.zeros((2,2))
 
         if not self.__cap.isOpened():
             raise Exception("Unable to open the camera")
@@ -27,7 +28,7 @@ class Vision:
 
     The frame is a table: (length_x, length_y, 3)
     '''
-    def get_image(self,cap):
+    def get_image(self,cap,plot):
 
         # Read one frame
         ret, frame = cap.read()
@@ -35,24 +36,25 @@ class Vision:
         if not ret:
             raise Exception("Unable to capture the image")
 
-        # Display the image
-        cv2.imshow("Captured image", frame)
-
-        # Attend une touche puis ferme
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if plot:
+            # Display the image
+            cv2.imshow("Captured image", frame)
+            # Attend une touche puis ferme
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
         #The advantage of the bilateral filter is that it manages to smooth the image all the while
         #conserving the edges. There is of course a tradeoff in terms of computation time but since 
         #we have time to do it it is ok (i.e. sampling time not too short)
         frame = cv2.bilateralFilter(frame, d=9, sigmaColor=75, sigmaSpace=75) #filtering
-        # Display the image
-        cv2.imshow("Filtered image", frame)
-        # Attend une touche puis ferme
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
-        print(frame.shape)
+        if plot:
+            # Display the image
+            cv2.imshow("Filtered image", frame)
+            # Attend une touche puis ferme
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            print(frame.shape)
 
         return frame
 
@@ -73,6 +75,53 @@ class Vision:
 
         cv2.destroyAllWindows()
 
+    def acquisition_loop(self):
+        plot = False  # affichage activé par défaut
+
+        print("Appuie sur :")
+        print(" - ESPACE pour activer/désactiver l'affichage de l'image")
+        print(" - ESC pour quitter")
+
+        while True:
+            try:
+                acquisition_delay = int(input("Entre acquisition_delay : "))
+            except:
+                print("Valeur invalide.")
+                continue
+
+            cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
+            start = time.time()
+
+            # Camera auto-tune
+            for _ in range(acquisition_delay):
+                cap.read()
+
+            # Get the "real" frame
+            frame = self.get_image(cap, plot)
+            
+            end = time.time()
+            print(f"Timing acquisition = {end - start:.6f} s")
+
+            # Plot seulement si activé
+            if frame is not None:
+                cv2.imshow("Frame", frame)
+
+            key = cv2.waitKey(1) & 0xFF
+            cap.release()
+
+            # ESC -> stop
+            if key == 27:
+                print("Arrêt.")
+                break
+            
+            # ESPACE -> toggle plot
+            elif key == 32:
+                plot = not plot
+                print("Affichage image :", plot)
+            
+
+        cv2.destroyAllWindows()
+
     def vision_test(self,acquisition_delay):        
         '''
         for w, h in [(640, 480), (1280, 720), (1920, 1080)]:
@@ -85,20 +134,25 @@ class Vision:
 
         #permit us to move the camera and find the good spot
         self.cam_centering(self.__cap)
+        #to kick
+        #self.__cap.release()
+        #self.acquisition_loop()
+        #self.cam_centering(self.__cap)
 
+        plot = 0
         start = time.time()
         #Camera auto-tune
         for idx in range(acquisition_delay):
             _,_ = self.__cap.read()
         
         #Get the "real" frame
-        frame = self.get_image(self.__cap)
+        frame = self.get_image(self.__cap,plot)
         end = time.time()
-        print(f"timing of getting an image (with the auto-tune) = {end - start}")
+        print(f"timing of getting an image (with the auto-tune) = {end - start}")#time of 684ms with acquisition_delay of 20 and 160ms to 210ms with acquisition_delay = 5 (and image sufficiently good)
         
         start = time.time()
         #Cut the frame with the aruco (to keep only the interesting zone)
-        frame_cropped = self.get_fram_from_aruco(frame)
+        frame_cropped,self.__goal_end = self.get_frame_from_aruco(frame)
         end = time.time()
         print(f"timing of cropping = {end - start}")
         #Display the image
@@ -108,7 +162,7 @@ class Vision:
         cv2.destroyAllWindows()
 
         start = time.time()
-        grid = self.get_grid(0,0,frame_cropped,90)
+        grid = self.get_grid(0,0,frame_cropped,150)#the last threshold parameter can be used to tune it (in function of the workplace)
         end = time.time()
         print(f"timing of get grid = {end - start}")
         start = time.time()
@@ -130,6 +184,36 @@ class Vision:
                 else:
                     image_cropped[i, j] = [0, 0, 255]      # bleu pour tout autre
 
+        grid_Ny, grid_Nx = grid.shape
+        height, width = frame_cropped.shape[:2]
+
+        # Remap start/end dans la grille
+        start_end_grid = []
+        for pt in self.__goal_end:
+            print(f"x = {pt[0]} and y = {pt[1]}")
+            x_norm = pt[0] #(normalization already done)
+            y_norm = pt[1]
+            print(f"x_norm = {x_norm} and y_norm = {y_norm}")
+            print(f"grid_Nx = {grid_Nx} and grid_Ny = {grid_Ny}")
+            x_grid = int(x_norm * grid_Nx)
+            y_grid = int(y_norm * grid_Ny)
+            # Clamp indices
+            x_grid = min(max(x_grid, 0), grid_Nx-1)
+            y_grid = min(max(y_grid, 0), grid_Ny-1)
+            start_end_grid.append((y_grid, x_grid))
+            print(f"x_grid = {x_grid} and y_grid = {y_grid}")
+            zone_size = 5 #zone to print
+            half_size = zone_size // 2
+
+            # Boucle pour chaque pixel dans la zone
+            for dy in range(-half_size, half_size + 1):
+                for dx in range(-half_size, half_size + 1):
+                    ny = y_grid + dy
+                    nx = x_grid + dx
+                    
+                    # Vérifie que l'on reste dans les limites de l'image
+                    if 0 <= ny < image_cropped.shape[0] and 0 <= nx < image_cropped.shape[1]:
+                        image_cropped[ny, nx] = [0, 255, 0]
         #Plot the grid
         plt.imshow(image_cropped, origin='upper')
         plt.axis('off')
@@ -152,7 +236,7 @@ class Vision:
     Detect the Arucos and crop the frame by creating a rectangle with the center of the Arucos being the corners
     '''
     # Function de https://www.geeksforgeeks.org/computer-vision/detecting-aruco-markers-with-opencv-and-python-1/
-    def get_fram_from_aruco(self,frame) : 
+    def get_frame_from_aruco(self,frame) : 
 
         # Convert the image to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -166,13 +250,14 @@ class Vision:
         # Print the detected markers
         print("Detected markers:", ids)
         print("Corners:", corners)
-
+        frame_aruco = frame.copy()
         if ids is not None:
-            cv2.aruco.drawDetectedMarkers(frame, corners, ids)
-            cv2.imshow('Detected Markers', frame)
+            cv2.aruco.drawDetectedMarkers(frame_aruco, corners, ids)
+            cv2.imshow('Detected Markers', frame_aruco)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
+        '''V1
         centers = []
         for c in corners:
             pts = c[0]                      # shape (4,2)
@@ -181,7 +266,54 @@ class Vision:
 
         centers = np.array(centers, dtype=np.float32)
         cropped_frame = self.cut_from_aruco(frame,centers)
-        return cropped_frame
+        '''
+
+        #id 0 is top left and id 2 is bottom right
+        #Detection of the "box"
+        centers_2pts=np.zeros((2,2))
+        id_to_idx = {0: 0, 2: 1} #since i can go to n (n being number of arucos)
+        aruco_margin = 5
+        for c, i in zip(corners, ids):
+            if i in [0, 2]:
+                center = c[0].mean(axis=0)
+                centers_2pts[id_to_idx[int(i)]] = center
+                #centers_2pts[i] = center
+            elif i in [1,3]:
+                pts = c[0].astype(int)
+
+                x_min = pts[:, 0].min()-aruco_margin
+                x_max = pts[:, 0].max()+aruco_margin
+                y_min = pts[:, 1].min()-aruco_margin
+                y_max = pts[:, 1].max()+aruco_margin
+
+                frame[y_min:y_max, x_min:x_max] = 255  #whiting filling of the goal/strat arucos (with a margin)
+
+        top_right = [centers_2pts[0][0],centers_2pts[1][1]]
+        bottom_left = [centers_2pts[1][0],centers_2pts[0][1]]
+
+        #[top-left, top-right, bottom-right, bottom-left]
+        centers = np.array([centers_2pts[0], top_right, centers_2pts[1], bottom_left], dtype=np.float32)
+
+        centers = np.array(centers, dtype=np.float32)
+        cropped_frame,M = self.cut_from_aruco(frame,centers)
+
+        start_end=np.zeros((2,2))
+        id_to_idx = {1: 0, 3: 1} #since i can go to n (n being number of arucos)
+        for c, i in zip(corners, ids):
+            if i in [1, 3]:
+                center = c[0].mean(axis=0)
+                start_end[id_to_idx[int(i)]] = center
+
+        #Normalize
+        for i in range(2):
+            pt = np.array([[start_end[i]]], dtype=np.float32)  # (1,1,2)
+            projected = cv2.perspectiveTransform(pt, M)#Aplly the cropped transformation on the goal/start centers
+            start_end[i] = projected[0][0]
+ 
+            # Normalisation dans le repère DU CROP
+            start_end[i][0] /= cropped_frame.shape[1]  # largeur
+            start_end[i][1] /= cropped_frame.shape[0]  # hauteur
+        return cropped_frame,start_end
 
     def cut_from_aruco(self,frame,centers):
 
@@ -204,7 +336,7 @@ class Vision:
         dst_pts = np.array([[0,0],[w,0],[w,h],[0,h]], dtype="float32")
         M = cv2.getPerspectiveTransform(box.astype("float32"), dst_pts)
         cropped_frame = cv2.warpPerspective(frame, M, (w, h))
-        return cropped_frame
+        return cropped_frame,M
 
 
     '''
@@ -275,6 +407,22 @@ class Vision:
                     grid[i, j] = 1   #road
                 else:
                     grid[i, j] = 0   #wall
+
+        # Optional (do we put it ??): dilate walls only (add safety margin) (permits to tune if bad lightning when using)
+        wall_dilation = 0 #to tune
+        if wall_dilation > 0:
+            # Invert grid: walls become 1, roads become 0
+            inv_grid = 1 - grid
+
+            # Create kernel
+            kernel = np.ones((2*wall_dilation+1, 2*wall_dilation+1), np.uint8)
+
+            # Dilate only walls
+            inv_grid = cv2.dilate(inv_grid.astype(np.uint8), kernel, iterations=1)
+
+            # Re-invert: walls back to 0, roads to 1
+            grid = 1 - inv_grid
+
         return grid
 
     '''
@@ -340,7 +488,7 @@ class Vision:
 
 #test
 v = Vision()
-v.vision_test(20)
+v.vision_test(5)
 
 
 
