@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+import time #to see if too slow (can be deleted)
 
 
 
@@ -85,24 +86,36 @@ class Vision:
         #permit us to move the camera and find the good spot
         self.cam_centering(self.__cap)
 
+        start = time.time()
         #Camera auto-tune
         for idx in range(acquisition_delay):
             _,_ = self.__cap.read()
         
         #Get the "real" frame
         frame = self.get_image(self.__cap)
+        end = time.time()
+        print(f"timing of getting an image (with the auto-tune) = {end - start}")
         
+        start = time.time()
         #Cut the frame with the aruco (to keep only the interesting zone)
         frame_cropped = self.get_fram_from_aruco(frame)
+        end = time.time()
+        print(f"timing of cropping = {end - start}")
         #Display the image
         cv2.imshow("Aruco cropped", frame_cropped)
         #Attend une touche puis ferme
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
+        start = time.time()
         grid = self.get_grid(0,0,frame_cropped,90)
+        end = time.time()
+        print(f"timing of get grid = {end - start}")
+        start = time.time()
         x, y, angle = self.detect_robot_orientation(frame_cropped)
+        end = time.time()
         print(f"X = {x} and Y = {y} and angle = {angle}")
+        print(f"Timing of getting an angle = {end - start}")
 
 
         #Reconstruction to visualize the grid
