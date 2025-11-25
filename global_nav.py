@@ -100,7 +100,7 @@ class GlobalNavigation :
         
         #Function to adapt the path for thymio robot dimension
         self.growing_obstacles()
-        ## initialize the varibales above
+        ## initialize the variables above
         came_from = {}      # to reconstruct path
         g_costs = {self.Start: 0}    # cost from start to the cell
         explored = set()    # to keep track of explored cells
