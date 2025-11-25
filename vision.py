@@ -4,6 +4,13 @@ import matplotlib.pyplot as plt
 import time #to see if too slow (can be deleted)
 
 
+'''
+
+Arucos: id 0 and 2 are used for the cut (i.e. to create the map) and 
+        id 1 and 3 for start (i.e. thymio) and goal position (1 for start and 3 for goal)
+Grid: 0 = road, 1 = walls, 2 = start, 3 = goal
+        
+'''
 
 class Vision:
     def __init__(self):
@@ -21,7 +28,7 @@ class Vision:
 
         # Open camera (0 = first camera USB detected)
         self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
-        self.__goal_end = np.zeros((2,2))
+        self.__goal_end = np.zeros((2,2)) #1 pt -> (x,y) -> NOT (y,x) (line first and column then)
 
         if not self.__cap.isOpened():
             raise Exception("Unable to open the camera")
@@ -70,9 +77,9 @@ class Vision:
     '''
     Used to setup the camera -> if space key pressed -> exit the loop
     '''
-    def cam_centering(self,cap):
+    def cam_centering(self):
         while True:
-            ret, frame = cap.read()
+            ret, frame = self.__cap.read()
             cv2.imshow("Cam centering", frame)
 
             key = cv2.waitKey(0)
@@ -129,7 +136,88 @@ class Vision:
 
         cv2.destroyAllWindows()
 
-    def vision_test(self,acquisition_delay):        
+    def plot_grid(self):
+        print(f"Grid sizeY = {self.grid.shape[0]}, grid sizeX = {self.grid.shape[1]}")
+        #Reconstruction to visualize the grid
+        image_cropped = np.zeros((self.grid.shape[0], self.grid.shape[1], 3), dtype=np.uint8)
+
+        for i in range(self.grid.shape[0]):
+            for j in range(self.grid.shape[1]):
+                if self.grid[i, j] == 0:
+                    image_cropped[i, j] = [0, 0, 0]        # noir
+                elif self.grid[i, j] == 1:
+                    image_cropped[i, j] = [255, 255, 255]  # blanc
+                elif self.grid[i,j] == 2:
+                    image_cropped[i, j] = [0, 255, 0]  # green (start)
+                elif self.grid[i,j] == 3:
+                    image_cropped[i, j] = [0, 0, 255]  # blue (goal)
+                else:
+                    image_cropped[i, j] = [255, 0, 0]      # red if unknown
+        
+        # Do a big square on goal/start
+        half_size=2
+        for dy in range(-half_size, half_size + 1):
+            for dx in range(-half_size, half_size + 1):
+                ny = int(self.thymio_pos[1]) + dy
+                nx = int(self.thymio_pos[0]) + dx
+                ny2 = int(self.goal[1]) + dy
+                nx2 = int(self.goal[0]) + dx
+                
+                # Vérifie que l'on reste dans les limites de l'image
+                if 0 <= ny < image_cropped.shape[0] and 0 <= nx < image_cropped.shape[1]:
+                    image_cropped[ny, nx] = [0, 255, 0]  # green (start)
+                if 0 <= ny2 < image_cropped.shape[0] and 0 <= nx2 < image_cropped.shape[1]:
+                    image_cropped[ny2, nx2] = [0, 0, 255]  # blue (goal)
+        
+        #Plot the grid
+        plt.imshow(image_cropped, origin='upper')
+        plt.axis('off')
+        plt.show()
+
+    '''
+    General function
+    Take a picture, cut it inside the Arucos and do the grid (0 -> road, 1 -> walls, 2 -> start, 3 -> goal)
+    '''
+    def vision(self,acquisition_delay,white_threshold,plot):
+        #Camera auto-tune
+        for idx in range(acquisition_delay):
+            _,_ = self.__cap.read()
+
+        frame = self.get_image(self.__cap,plot)
+
+        #Cut the frame with the aruco (to keep only the interesting zone)
+        frame_cropped,self.__goal_end = self.get_frame_from_aruco(frame)
+
+        if plot:
+            cv2.imshow("Aruco cropped", frame_cropped)
+            #Attend une touche puis ferme
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        self.grid = self.get_grid(0,0,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
+
+        grid_Ny, grid_Nx = self.grid.shape
+        height, width = frame_cropped.shape[:2]
+
+        # Remap start/end in the grid
+        start_end_grid = []
+        i = 0
+        for pt in self.__goal_end:
+            i += 1
+            x_grid = int(pt[0] * grid_Nx)#(normalization already done in aruco cutting)
+            y_grid = int(pt[1] * grid_Ny)
+            # Clamp indices
+            x_grid = min(max(x_grid, 0), grid_Nx-1)
+            y_grid = min(max(y_grid, 0), grid_Ny-1)
+
+            self.grid[x_grid,y_grid] = i+2# start => 2 and goal => 3 #to plot it
+            if i==1:
+                self.thymio_pos = [x_grid,y_grid]
+            elif i==2:
+                self.goal = [x_grid,y_grid]
+        
+
+    def vision_test(self,acquisition_delay,white_threshold):        
         '''
         for w, h in [(640, 480), (1280, 720), (1920, 1080)]:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
@@ -140,7 +228,7 @@ class Vision:
             print(f"Requested: {w}x{h} -> Got: {frame.shape[1]}x{frame.shape[0]}")'''
 
         #permit us to move the camera and find the good spot
-        self.cam_centering(self.__cap)
+        self.cam_centering()
         #to kick
         #self.__cap.release()
         #self.acquisition_loop()
@@ -169,7 +257,7 @@ class Vision:
         cv2.destroyAllWindows()
 
         start = time.time()
-        grid = self.get_grid(0,0,frame_cropped,150)#the last threshold parameter can be used to tune it (in function of the workplace)
+        grid = self.get_grid(0,0,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
         end = time.time()
         print(f"timing of get grid = {end - start}")
         start = time.time()
@@ -318,8 +406,8 @@ class Vision:
             start_end[i] = projected[0][0]
  
             # Normalisation dans le repère DU CROP
-            start_end[i][0] /= cropped_frame.shape[1]  # largeur
-            start_end[i][1] /= cropped_frame.shape[0]  # hauteur
+            start_end[i][0] /= cropped_frame.shape[0]  # width
+            start_end[i][1] /= cropped_frame.shape[1]  # height
         return cropped_frame,start_end
 
     def cut_from_aruco(self,frame,centers):
@@ -495,7 +583,9 @@ class Vision:
 
 #test
 v = Vision()
-v.vision_test(5)
-
+#v.vision_test(5,90)
+v.cam_centering()
+v.vision(5,90,True)
+v.plot_grid()
 
 
