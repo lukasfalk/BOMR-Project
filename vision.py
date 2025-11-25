@@ -9,6 +9,8 @@ import time #to see if too slow (can be deleted)
 Arucos: id 0 and 2 are used for the cut (i.e. to create the map) and 
         id 1 and 3 for start (i.e. thymio) and goal position (1 for start and 3 for goal)
 Grid: 0 = road, 1 = walls, 2 = start, 3 = goal
+
+Aruco size -> 5cm and max Robot size -> 12cm => cell size 
         
 '''
 
@@ -21,10 +23,11 @@ class Vision:
         '''
         #Variables for Vision
         self.grid = None 
-        self.thymio_size = None 
         self.thymio_pos = None
         self.cell_size = None 
         self.goal = None
+        self.__cm_per_pixel_after = None
+        self.__cm_per_pixel_before = None
 
         # Open camera (0 = first camera USB detected)
         self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
@@ -327,6 +330,7 @@ class Vision:
         plt.axis('off')
         plt.show()
 
+
     '''
     Detect the Arucos and crop the frame by creating a rectangle with the center of the Arucos being the corners
     '''
@@ -352,36 +356,46 @@ class Vision:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        '''V1
-        centers = []
-        for c in corners:
-            pts = c[0]                      # shape (4,2)
-            center = pts.mean(axis=0)       # centre (x,y)
-            centers.append(center)
-
-        centers = np.array(centers, dtype=np.float32)
-        cropped_frame = self.cut_from_aruco(frame,centers)
-        '''
-
         #id 0 is top left and id 2 is bottom right
-        #Detection of the "box"
+        #Detection of the "box" + calculation of the cell size
+        aruco_real_size_cm = 5.0  # Your known ArUco physical size
+        aruco_pixel_sizes = []
+
         centers_2pts=np.zeros((2,2))
         id_to_idx = {0: 0, 2: 1} #since i can go to n (n being number of arucos)
-        aruco_margin = 5
+        aruco_margin_factor = 0.1 #how much size of the Aruco do we want to add ?
         for c, i in zip(corners, ids):
+            pts = c[0]  # shape (4,2)
+
+            # Distance between top-left and top-right corners
+            pixel_width = np.linalg.norm(pts[0] - pts[1])
+            pixel_height = np.linalg.norm(pts[1] - pts[2])
+            aruco_pixel_sizes.append((pixel_width + pixel_height) / 2)
+
             if i in [0, 2]:
                 center = c[0].mean(axis=0)
                 centers_2pts[id_to_idx[int(i)]] = center
                 #centers_2pts[i] = center
-            elif i in [1,3]:
-                pts = c[0].astype(int)
+                
+            elif i in [1,3]:#replace the two arucos which are inside by white squares (to avoid confusion during the grid creation)
+                center = c[0].mean(axis=0)
 
-                x_min = pts[:, 0].min()-aruco_margin
-                x_max = pts[:, 0].max()+aruco_margin
-                y_min = pts[:, 1].min()-aruco_margin
-                y_max = pts[:, 1].max()+aruco_margin
+                expanded_pts = []
+                for pt in pts:#radially expand it
+                    vec = pt - center
+                    length = np.linalg.norm(vec)
+                    if length > 0:
+                        new_pt = center + vec * (1 + aruco_margin_factor)
+                        expanded_pts.append(new_pt)
 
-                frame[y_min:y_max, x_min:x_max] = 255  #whiting filling of the goal/strat arucos (with a margin)
+                expanded_pts = np.array(expanded_pts, dtype=np.int32)
+                cv2.fillPoly(frame, [expanded_pts], (255, 255, 255))
+
+        # Average pixel size of all detected ArUcos
+        aruco_pixel_size_before = np.mean(aruco_pixel_sizes)
+
+        # Conversion ratio
+        self.__cm_per_pixel_before = 5.0/aruco_pixel_size_before
 
         top_right = [centers_2pts[0][0],centers_2pts[1][1]]
         bottom_left = [centers_2pts[1][0],centers_2pts[0][1]]
@@ -399,6 +413,7 @@ class Vision:
                 center = c[0].mean(axis=0)
                 start_end[id_to_idx[int(i)]] = center
 
+
         #Normalize
         for i in range(2):
             pt = np.array([[start_end[i]]], dtype=np.float32)  # (1,1,2)
@@ -406,23 +421,67 @@ class Vision:
             start_end[i] = projected[0][0]
  
             # Normalisation dans le repère DU CROP
-            start_end[i][0] /= cropped_frame.shape[0]  # width
-            start_end[i][1] /= cropped_frame.shape[1]  # height
+            start_end[i][0] /= cropped_frame.shape[1]  # width (shape[1] = columns)
+            start_end[i][1] /= cropped_frame.shape[0]  # height (shape[0] = rows)
+
+        # Recalculate the new pixel size in cm (i.e. the cropped image pixel size)
+        # Detect the markers
+        corners, ids, rejected = detector.detectMarkers(gray)
+        # Print the detected markers to see if the croped markers are detected
+        print("Detected markers:", ids)
+        print("Corners:", corners)
+        frame_aruco = frame.copy()
+        if ids is not None:
+            cv2.aruco.drawDetectedMarkers(frame_aruco, corners, ids)
+            cv2.imshow('Detected Markers', frame_aruco)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        aruco_pixel_sizes = []
+
+        for c, i in zip(corners, ids):
+            pts = c[0]  # shape (4,2)
+
+            # Distance between top-left and top-right corners
+            pixel_width = np.linalg.norm(pts[0] - pts[1])
+            pixel_height = np.linalg.norm(pts[1] - pts[2])
+            aruco_pixel_sizes.append((pixel_width + pixel_height) / 2)
+
+        # Average pixel size of all detected ArUcos
+        aruco_pixel_size_after = np.mean(aruco_pixel_sizes)
+
+        # Conversion ratio
+        self.__cm_per_pixel_after = 5.0/aruco_pixel_size_after
+        '''
+        #test cm_per_pixel_after/before by creating a line of 40 cm and 1 cm of width
+        # Ligne sur image non croppée
+        cv2.line(frame, (10, 10), (10 + int(5 / self.__cm_per_pixel_before), 10), (0, 255, 0), 2)
+        cv2.imshow("Avant crop", frame)
+        cv2.waitKey(0)
+
+        # Ligne sur image croppée
+        cv2.line(cropped_frame, (10, 10), (10 + int(5 / self.__cm_per_pixel_after), 10), (0, 0, 255), 2)
+        cv2.imshow("Après crop", cropped_frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        '''
         return cropped_frame,start_end
 
+    '''
+    Do the cut and return the cropped frame and the transformation matrix
+    + applies perspective transformation to obtain a frontal/orthogonal view
+    and do a borderMode to reduce distortion at the edges
+    '''
     def cut_from_aruco(self,frame,centers):
-
-        if(len(centers)<4):
-            print("Less than 4 Arucos detected -> still try")
 
         # --- Calcul du rectangle minimal ---
         rect = cv2.minAreaRect(centers)     # (center,(w,h),angle)
         box = cv2.boxPoints(rect)           # 4 coins du rectangle
-        box = box.astype(np.int32) 
+        box = box.astype(np.float32) 
 
-        # --- Découpe en warp ---
-        w = int(rect[1][0])
-        h = int(rect[1][1])
+        # Calculate actual distances between corners to preserve aspect ratio
+        w = int(np.round(np.linalg.norm(box[1] - box[0])))
+        h = int(np.round(np.linalg.norm(box[2] - box[1])))
 
         if w == 0 or h == 0:
             print("Rectangle invalide.")
@@ -430,7 +489,8 @@ class Vision:
 
         dst_pts = np.array([[0,0],[w,0],[w,h],[0,h]], dtype="float32")
         M = cv2.getPerspectiveTransform(box.astype("float32"), dst_pts)
-        cropped_frame = cv2.warpPerspective(frame, M, (w, h))
+        # Apply borderMode to reduce distortion at the edges
+        cropped_frame = cv2.warpPerspective(frame, M, (w, h), borderMode=cv2.BORDER_REFLECT)
         return cropped_frame,M
 
 
@@ -453,6 +513,27 @@ class Vision:
         #Compute cell size (avoid zero-sized windows)
         cell_h = max(height // grid_Ny, 1)
         cell_w = max(width  // grid_Nx, 1)
+
+        #calculte cell size in cm
+        cell_w_cm = cell_w * self.__cm_per_pixel_after
+        cell_h_cm = cell_h * self.__cm_per_pixel_after
+        self.cell_size = (cell_w_cm + cell_h_cm) / 2 #average
+
+        '''
+        # Test visuel de cell_size sur l'image croppée
+        print(f"cell_size (cm) = {self.cell_size}")
+        # Trace une ligne de longueur 5*cell_size sur l'image croppée
+        try:
+            frame_copy = frame.copy()
+            start_point = (20, 20)
+            end_point = (20 + int(5*self.cell_size / self.__cm_per_pixel_after), 20)
+            cv2.line(frame_copy, start_point, end_point, (255, 0, 255), 2)
+            cv2.imshow("Test cell_size (ligne magenta)", frame_copy)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        except Exception as e:
+            print(f"Erreur lors du test visuel cell_size: {e}")
+            '''
 
         grid = np.zeros((grid_Ny, grid_Nx), dtype=int)
 
