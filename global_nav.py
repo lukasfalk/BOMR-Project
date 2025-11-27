@@ -58,7 +58,7 @@ class GlobalNavigation :
         self.Goal = col, row
         self.grid = vision.grid
         self.cell_size = vision.cell_size
-        self.thymio_size = vision.thymio_size
+        self.thymio_size = 12
 
         #Adapt thymio size for grid
         self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
@@ -213,21 +213,39 @@ class GlobalNavigation :
         # Créer une copie de la grille pour ne pas modifier l'originale
         grid_with_path = self.grid.copy()
 
-        # Marquer le chemin sur la grille
+        thickness = 5  # Épaisseur pour le chemin, start et goal
+        half_thickness = thickness // 2
+
+        # Marquer le chemin sur la grille avec épaisseur
         for row, col in path:
-            grid_with_path[row, col] = 2  # Utiliser '2' pour représenter le chemin
+            for di in range(-half_thickness, half_thickness + 1):
+                for dj in range(-half_thickness, half_thickness + 1):
+                    ni = row + di
+                    nj = col + dj
+                    if 0 <= ni < len(grid_with_path) and 0 <= nj < len(grid_with_path[0]):
+                        grid_with_path[ni, nj] = 2  # Utiliser '2' pour représenter le chemin
         
-        #Assign start and goal for different color on map
+        #Assign start and goal for different color on map with thickness
         start_y, start_x = path[0]
-        grid_with_path[start_y, start_x] = 3
+        for di in range(-half_thickness, half_thickness + 1):
+            for dj in range(-half_thickness, half_thickness + 1):
+                ni = start_y + di
+                nj = start_x + dj
+                if 0 <= ni < len(grid_with_path) and 0 <= nj < len(grid_with_path[0]):
+                    grid_with_path[ni, nj] = 3
 
         goal_y, goal_x = path[-1]
-        grid_with_path[goal_y, goal_x] = 4
+        for di in range(-half_thickness, half_thickness + 1):
+            for dj in range(-half_thickness, half_thickness + 1):
+                ni = goal_y + di
+                nj = goal_x + dj
+                if 0 <= ni < len(grid_with_path) and 0 <= nj < len(grid_with_path[0]):
+                    grid_with_path[ni, nj] = 4
 
         self.grid = grid_with_path
         # Afficher la grille avec le chemin
-        print("Grid with path:")
-        print(grid_with_path)
+        #print("Grid with path:")
+        #print(grid_with_path)
 
    
     def display_colored_grid(self):

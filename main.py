@@ -91,8 +91,8 @@ def main():
     # Initialize variables for path visualization
     current_path = None  # Vector of displacement vectors at each step
     current_image = None
-    v = None
-    gnav = None
+    v = Vision()
+    gnav = GlobalNavigation()
     step_count = 0
     current_path = None  # Will be filled with displacement vectors
     
@@ -101,16 +101,19 @@ def main():
 
         if state == State.GRID_CREATION:
             print("Grid Creation")
-            v = Vision()
-            v.vision(5,90,False)
-            gnav = GlobalNavigation(v)
+            v.cam_centering()
+            v.vision(5,90,True)
+            v.plot_grid()
+            gnav.set_gnav(v)
             current_path, explored, opertation_count = gnav.grid_search()
-            gnav.display_grid_with_path()
+            gnav.display_grid_with_path(current_path)
             gnav.display_colored_grid()
+            print("A* path length =", len(current_path)-1, "\n", current_path)
             # TODO: gnav -> find the array of vectors (deplacement at step k)
             # current_path should be a list of displacement vectors (or steps)
             # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
             step_count = 0
+            
             
             state = State.GLOBAL_NAVIGATION
 
@@ -135,7 +138,9 @@ def main():
                     print(f"Step {step_count}: Following path, {len(current_path)} displacement vectors")
                 
                 step_count += 1
-
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            break
             #is one if the proximity sensors doesn't detect anything under the robot
             #-> TODO: get this info from motion_control
             if floor_not_detected:

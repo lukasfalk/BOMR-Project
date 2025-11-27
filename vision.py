@@ -16,13 +16,16 @@ Aruco size -> 5cm and max Robot size -> 12cm => cell size
 
 class Vision:
     def __init__(self):
-        #Variables for Vision
+        #Variables for gnav/outside the class
         self.grid = None 
         self.thymio_pos = None
         self.cell_size = None 
         self.goal = None
         self.__cm_per_pixel_after = None
         self.__cm_per_pixel_before = None
+
+        #variables mainly for the class
+        self.wall_dilation = 0 #0 by default -> used in get_grid()
 
         # Open camera (0 = first camera USB detected)
         self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
@@ -34,6 +37,9 @@ class Vision:
     def __del__(self):
         #Release the camera
         self.__cap.release()
+
+    def set_wall_dilation(self,dilation):
+        self.wall_dilation = dilation
 
     ''''
     Return one frame
@@ -145,10 +151,6 @@ class Vision:
                     image_cropped[i, j] = [0, 0, 0]        # noir
                 elif self.grid[i, j] == 1:
                     image_cropped[i, j] = [255, 255, 255]  # blanc
-                elif self.grid[i,j] == 2:
-                    image_cropped[i, j] = [0, 255, 0]  # green (start)
-                elif self.grid[i,j] == 3:
-                    image_cropped[i, j] = [0, 0, 255]  # blue (goal)
                 else:
                     image_cropped[i, j] = [255, 0, 0]      # red if unknown
         
@@ -168,8 +170,17 @@ class Vision:
                     image_cropped[ny2, nx2] = [0, 0, 255]  # blue (goal)
         
         #Plot the grid
+        plt.figure(figsize=(6, 6))
         plt.imshow(image_cropped, origin='upper')
-        plt.axis('off')
+        #Add grid lines (i.e. cell borders)
+        ax = plt.gca()
+        ax.set_xticks(np.arange(-0.5, self.grid.shape[1], 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, self.grid.shape[0], 1), minor=True)
+        ax.grid(which='minor', color='gray', linewidth=0.5)
+        ax.set_xticks(np.arange(0, self.grid.shape[1], 1), minor=False)
+        ax.set_yticks(np.arange(0, self.grid.shape[0], 1), minor=False)
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
         plt.show()
 
     '''
@@ -208,124 +219,11 @@ class Vision:
             x_grid = min(max(x_grid, 0), grid_Nx-1)
             y_grid = min(max(y_grid, 0), grid_Ny-1)
 
-            #self.grid[x_grid,y_grid] = i+2# start => 2 and goal => 3 #to plot it
-            self.grid[y_grid,x_grid] = i+2# start => 2 and goal => 3 #to plot it
             if i==1:
                 self.thymio_pos = [x_grid,y_grid]
             elif i==2:
                 self.goal = [x_grid,y_grid]
         
-
-    def vision_test(self,acquisition_delay,white_threshold):        
-        '''
-        for w, h in [(640, 480), (1280, 720), (1920, 1080)]:
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
-            time.sleep(0.2)   # important
-
-            ret, frame = cap.read()
-            print(f"Requested: {w}x{h} -> Got: {frame.shape[1]}x{frame.shape[0]}")'''
-
-        #permit us to move the camera and find the good spot
-        self.cam_centering()
-        #to kick
-        #self.__cap.release()
-        #self.acquisition_loop()
-        #self.cam_centering(self.__cap)
-
-        plot = 0
-        start = time.time()
-        #Camera auto-tune
-        for idx in range(acquisition_delay):
-            _,_ = self.__cap.read()
-        
-        #Get the "real" frame
-        frame = self.get_image(self.__cap,plot)
-        end = time.time()
-        print(f"timing of getting an image (with the auto-tune) = {end - start}")#time of 684ms with acquisition_delay of 20 and 160ms to 210ms with acquisition_delay = 5 (and image sufficiently good)
-        
-        start = time.time()
-        #Cut the frame with the aruco (to keep only the interesting zone)
-        frame_cropped,self.__goal_end = self.get_frame_from_aruco(frame)
-        end = time.time()
-        print(f"timing of cropping = {end - start}")
-        #Display the image
-        cv2.imshow("Aruco cropped", frame_cropped)
-        #Attend une touche puis ferme
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-        start = time.time()
-        grid = self.get_grid(0,0,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
-        end = time.time()
-        print(f"timing of get grid = {end - start}")
-        start = time.time()
-        x, y, angle = self.detect_robot_orientation(frame_cropped)
-        end = time.time()
-        print(f"X = {x} and Y = {y} and angle = {angle}")
-        print(f"Timing of getting an angle = {end - start}")
-
-
-        #Reconstruction to visualize the grid
-        image_cropped = np.zeros((grid.shape[0], grid.shape[1], 3), dtype=np.uint8)
-
-        for i in range(grid.shape[0]):
-            for j in range(grid.shape[1]):
-                if grid[i, j] == 0:
-                    image_cropped[i, j] = [0, 0, 0]        # noir
-                elif grid[i, j] == 1:
-                    image_cropped[i, j] = [255, 255, 255]  # blanc
-                else:
-                    image_cropped[i, j] = [0, 0, 255]      # bleu pour tout autre
-
-        grid_Ny, grid_Nx = grid.shape
-        height, width = frame_cropped.shape[:2]
-
-        # Remap start/end dans la grille
-        start_end_grid = []
-        for pt in self.__goal_end:
-            print(f"x = {pt[0]} and y = {pt[1]}")
-            x_norm = pt[0] #(normalization already done)
-            y_norm = pt[1]
-            print(f"x_norm = {x_norm} and y_norm = {y_norm}")
-            print(f"grid_Nx = {grid_Nx} and grid_Ny = {grid_Ny}")
-            x_grid = int(x_norm * grid_Nx)
-            y_grid = int(y_norm * grid_Ny)
-            # Clamp indices
-            x_grid = min(max(x_grid, 0), grid_Nx-1)
-            y_grid = min(max(y_grid, 0), grid_Ny-1)
-            start_end_grid.append((y_grid, x_grid))
-            print(f"x_grid = {x_grid} and y_grid = {y_grid}")
-            zone_size = 5 #zone to print
-            half_size = zone_size // 2
-
-            # Boucle pour chaque pixel dans la zone
-            for dy in range(-half_size, half_size + 1):
-                for dx in range(-half_size, half_size + 1):
-                    ny = y_grid + dy
-                    nx = x_grid + dx
-                    
-                    # Vérifie que l'on reste dans les limites de l'image
-                    if 0 <= ny < image_cropped.shape[0] and 0 <= nx < image_cropped.shape[1]:
-                        image_cropped[ny, nx] = [0, 255, 0]
-        #Plot the grid
-        plt.imshow(image_cropped, origin='upper')
-        plt.axis('off')
-        plt.show()
-
-        #plot the detected red line on the grid
-
-        # Définir la ligne rouge pour le robot
-        length = 5  # longueur de la ligne en pixels
-        end_x = x + length * np.cos(np.deg2rad(angle))
-        end_y = y + length * np.sin(np.deg2rad(angle))
-
-        # Affichage
-        plt.imshow(image_cropped, origin='upper')
-        plt.plot([x, end_x], [y, end_y], color='red', linewidth=2)
-        plt.axis('off')
-        plt.show()
-
 
     '''
     Detect the Arucos and crop the frame by creating a rectangle with the center of the Arucos being the corners
@@ -354,7 +252,7 @@ class Vision:
 
         #id 0 is top left and id 2 is bottom right
         #Detection of the "box" + calculation of the cell size
-        aruco_real_size_cm = 5.0  # Your known ArUco physical size
+        aruco_real_size_cm = 5.3  #Known ArUco physical size
         aruco_pixel_sizes = []
 
         centers_2pts=np.zeros((2,2))
@@ -371,7 +269,6 @@ class Vision:
             if i in [0, 2]:
                 center = c[0].mean(axis=0)
                 centers_2pts[id_to_idx[int(i)]] = center
-                #centers_2pts[i] = center
                 
             elif i in [1,3]:#replace the two arucos which are inside by white squares (to avoid confusion during the grid creation)
                 center = c[0].mean(axis=0)
@@ -580,14 +477,13 @@ class Vision:
                 else:
                     grid[i, j] = 0   #wall
 
-        # Optional (do we put it ??): dilate walls only (add safety margin) (permits to tune if bad lightning when using)
-        wall_dilation = 0 #to tune
-        if wall_dilation > 0:
+        #dilate walls only (add safety margin) (permits to tune if bad lightning when using)
+        if self.wall_dilation > 0:
             # Invert grid: walls become 1, roads become 0
             inv_grid = 1 - grid
 
             # Create kernel
-            kernel = np.ones((2*wall_dilation+1, 2*wall_dilation+1), np.uint8)
+            kernel = np.ones((2*self.wall_dilation+1, 2*self.wall_dilation+1), np.uint8)
 
             # Dilate only walls
             inv_grid = cv2.dilate(inv_grid.astype(np.uint8), kernel, iterations=1)
@@ -640,13 +536,13 @@ class Vision:
         top_right = pts[1]
         dx = top_right[0] - x
         dy = top_right[1] - y
-        angle = np.arctan2(dy, dx) * 180 / np.pi
+        angle = np.arctan2(dy, dx)
         
         # Normalize angle to [-180, 180]
-        if angle < -180:
-            angle += 360
-        if angle > 180:
-            angle -= 360
+        if angle < -np.pi:
+            angle += 2*np.pi
+        if angle > np.pi:
+            angle -= 2*np.pi
         
         return x, y, angle
 
@@ -704,10 +600,11 @@ class Vision:
         return cx, cy, angle
 
 #test
+'''
 v = Vision()
 #v.vision_test(5,90)
 v.cam_centering()
 v.vision(5,150,True)
 v.plot_grid()
-
+'''
 
