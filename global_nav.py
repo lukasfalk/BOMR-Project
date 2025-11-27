@@ -213,7 +213,7 @@ class GlobalNavigation :
         # Créer une copie de la grille pour ne pas modifier l'originale
         grid_with_path = self.grid.copy()
 
-        thickness = 5  # Épaisseur pour le chemin, start et goal
+        thickness = 2  # Épaisseur pour le chemin, start et goal
         half_thickness = thickness // 2
 
         # Marquer le chemin sur la grille avec épaisseur
@@ -254,7 +254,7 @@ class GlobalNavigation :
         cmap = ListedColormap(['black', 'white', 'yellow', 'red', 'blue']) 
 
     
-        plt.imshow(self.grid, cmap=cmap, origin='upper')
+        plt.imshow(self.grid, cmap=cmap, origin='upper', aspect='equal')
 
         # Add lines between cells
         ax = plt.gca()
