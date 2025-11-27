@@ -63,7 +63,7 @@ async def gradient_following(client, node): # instruction for testing
 async def path_following(client, node, i):
     global INDEX
     path = [(20, 0), (10, np.pi/2), (10, np.pi/2), (14.14, np.pi/4), (0, 3*np.pi/4)]
-    if INDEX >= len(path):
+    if INDEX >= len(path) and test_obstacle_detected(list(node["prox.horizontal"])):
         return
     await move_to(client, node, path[INDEX][0], path[INDEX][1])
     INDEX += 1
