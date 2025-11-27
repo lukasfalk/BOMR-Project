@@ -19,41 +19,43 @@ class GlobalNavigation :
         self.robot_size = None
         self.robot_size_cells = None
 
-        '''
-        Testing zone 
-        '''
-        # Testing zone: Generate a large grid for testing
-        self.grid = np.ones((10, 10), dtype=int)  # Create a 20x20 grid filled with zeros
-        self.Start = (0, 0)  # Top-left corner
-        self.Goal = (9, 9)  # Bottom-right corner
+        # '''
+        # Testing zone 
+        # '''
+        # # Testing zone: Generate a large grid for testing
+        # self.grid = np.ones((10, 10), dtype=int)  # Create a 20x20 grid filled with zeros
+        # self.Start = (0, 0)  # Top-left corner
+        # self.Goal = (9, 9)  # Bottom-right corner
 
-        self.thymio_size = 1.5  # Taille maximale du robot (en unités réelles)
-        self.cell_size = 1  # Taille d'une cellule (en unités réelles)
+        # self.thymio_size = 1.5  # Taille maximale du robot (en unités réelles)
+        # self.cell_size = 1  # Taille d'une cellule (en unités réelles)
 
-        # Calculer la taille totale en cellules
-        self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
-        self.robot_size_cells = 2 * self.robot_size + 1  # Rayon à gauche + centre + rayon à droite
+        # # Calculer la taille totale en cellules
+        # self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
+        # self.robot_size_cells = 2 * self.robot_size + 1  # Rayon à gauche + centre + rayon à droite
 
-        print("Rayon du robot en cellules :", self.robot_size)
-        print("Taille totale du robot en cellules :", self.robot_size_cells)
+        # print("Rayon du robot en cellules :", self.robot_size)
+        # print("Taille totale du robot en cellules :", self.robot_size_cells)
 
-        # Add some obstacles to the grid for testing
-        self.grid[5, 5] = 0  # Small block
-        # self.grid[10, 5:15] = 0  # Horizontal wall
-        # self.grid[15:18, 10:12] = 0  # Small block
+        # # Add some obstacles to the grid for testing
+        # self.grid[5, 5] = 0  # Small block
+        # # self.grid[10, 5:15] = 0  # Horizontal wall
+        # # self.grid[15:18, 10:12] = 0  # Small block
 
-        # Print the grid for visualization
-        print("Generated grid for testing:")
-        print(self.grid)
+        # # Print the grid for visualization
+        # print("Generated grid for testing:")
+        # print(self.grid)
 
-        '''
-        End Testing zone
-        '''
+        # '''
+        # End Testing zone
+        # '''
 
     def set_gnav(self, vision):
 
-        self.Start = vision.thymio_pos
-        self.Goal = vision.goal
+        row, col = vision.thymio_pos
+        self.Start = row, col
+        row, col = vision.goal
+        self.Goal = col, row
         self.grid = vision.grid
         self.cell_size = vision.cell_size
         self.thymio_size = vision.thymio_size
