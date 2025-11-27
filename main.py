@@ -3,8 +3,14 @@ import matplotlib.pyplot as plt
 import time
 import cv2
 
+import asyncio
+import numpy as np
+from tdmclient import ClientAsync
+
 from vision import Vision
 from global_nav import GlobalNavigation #from global_nav import GlobalNavigation
+
+from motion_control_2 import motion_control, motors
 # import motion_control
 # import filtering
 # import local_avoidance
@@ -72,107 +78,124 @@ def plot_path_on_image(image, displacements, scale):
     
     return image_with_path
 
-def main():
-    state = State.GRID_CREATION
-    #v = vision.Vision()
-    #v.vision_test(20)
+async def main():
+    client = ClientAsync()
+    node = await client.wait_for_node()
+    await node.lock()
 
-    #gnav = global_nav.GlobalNavigation()
-    #path, explored, operation_count = gnav.grid_search()
-    #gnav.display_grid_with_path(path)
-    #gnav.display_colored_grid()
-    # if path:
-    #     print("A* path length =", len(path)-1, "\n", path)
-    #     print("length explored:", len(explored))
-    #     print("A* visualization")
-    # else:
-    #     print("No path found with A*")
-    
-    # Initialize variables for path visualization
-    current_path = None  # Vector of displacement vectors at each step
-    current_image = None
-    v = Vision()
-    gnav = GlobalNavigation()
-    step_count = 0
-    current_path = None  # Will be filled with displacement vectors
-    
-    just_changed_state = True
-    while(1):
+    try:
 
-        if state == State.GRID_CREATION:
-            print("Grid Creation")
-            v.cam_centering()
-            v.vision(5,90,True)
-            v.plot_grid()
-            gnav.set_gnav(v)
-            current_path, explored, opertation_count = gnav.grid_search()
-            gnav.display_grid_with_path(current_path)
-            gnav.display_colored_grid()
-            print("A* path length =", len(current_path)-1, "\n", current_path)
-            # TODO: gnav -> find the array of vectors (deplacement at step k)
-            # current_path should be a list of displacement vectors (or steps)
-            # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
-            step_count = 0
-            
-            
-            state = State.GLOBAL_NAVIGATION
+        state = State.GRID_CREATION
+        #v = vision.Vision()
+        #v.vision_test(20)
 
-        elif state == State.GLOBAL_NAVIGATION:
+        #gnav = global_nav.GlobalNavigation()
+        #path, explored, operation_count = gnav.grid_search()
+        #gnav.display_grid_with_path(path)
+        #gnav.display_colored_grid()
+        # if path:
+        #     print("A* path length =", len(path)-1, "\n", path)
+        #     print("length explored:", len(explored))
+        #     print("A* visualization")
+        # else:
+        #     print("No path found with A*")
+        
+        # Initialize variables for path visualization
+        current_path = None  # Vector of displacement vectors at each step
+        current_image = None
+        v = Vision()
+        gnav = GlobalNavigation()
+        step_count = 0
+        current_path = None  # Will be filled with displacement vectors
+        
+        just_changed_state = True
+        while(1):
 
-            if just_changed_state:
-                print("Entering Global Navigation State")
-                just_changed_state = False
-
-
-            # TODO: update the image with the path to show that the robot is following it
-            # This replots at each time step to show robot progress
-            # or
-            # TODO: plot the image with the paths
-            # Get raw image and plot path at each step
-            if current_path is not None:
-                current_image = v.get_image(v._Vision__cap, False)
-                
-                if current_image is not None:
-                    # Plot the image with the paths (displacement vectors)
-                    image_with_path = plot_path_on_image(current_image, current_path, scale=1)
-                    print(f"Step {step_count}: Following path, {len(current_path)} displacement vectors")
-                
-                step_count += 1
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            break
-            #is one if the proximity sensors doesn't detect anything under the robot
-            #-> TODO: get this info from motion_control
-            if floor_not_detected:
-                state = State.KIDNAPPING
-                just_changed_state = True
-            #-> TODO: get this info from motion_control/if we are doing the steps computation here -> do it here
-            if reached:
-                state = State.GOAL_REACHED
-        elif state == State.KIDNAPPING:
-            if just_changed_state:
-                just_changed_state = False
-                print("Entering Kidnapping State")
-                # TODO: kill the image with the path to show that the robot is lost
-                current_path = None
+            if state == State.GRID_CREATION:
+                print("Grid Creation")
+                v.cam_centering()
+                v.vision(5,90,True)
+                v.plot_grid()
+                gnav.set_gnav(v)
+                current_path, explored, opertation_count = gnav.grid_search()
+                gnav.display_grid_with_path(current_path)
+                gnav.display_colored_grid()
+                print("A* path length =", len(current_path)-1, "\n", current_path)
+                # TODO: gnav -> find the array of vectors (deplacement at step k)
+                # current_path should be a list of displacement vectors (or steps)
+                # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
                 step_count = 0
+                
+                
+                state = State.GLOBAL_NAVIGATION
 
-            robot_detected = v.get_thymio_pos() is not None
+            else:
+                if motion_control(client, node):
+                    robot_detected = v.get_thymio_pos() is not None
+                    if robot_detected:
+                        await client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
+                        state = State.GRID_CREATION
 
-            #-> TODO: get this info from motion_control
-            if robot_detected and floor_detected:
-                time.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
-                state = State.GRID_CREATION
-                just_changed_state = True
-        elif state == State.GOAL_REACHED:
-            print("Goal Reached State")
-            #potentialy do some celebration and show on the screen the mistake due to uncertainties (or just say it at the presentation)
-            # TODO: STOP robot
+            # elif state == State.GLOBAL_NAVIGATION:
 
-            #Wait finish signal
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            break
+            #     if just_changed_state:
+            #         print("Entering Global Navigation State")
+            #         just_changed_state = False
+
+
+            #     # TODO: update the image with the path to show that the robot is following it
+            #     # This replots at each time step to show robot progress
+            #     # or
+            #     # TODO: plot the image with the paths
+            #     # Get raw image and plot path at each step
+            #     if current_path is not None:
+            #         current_image = v.get_image(v._Vision__cap, False)
+                    
+            #         if current_image is not None:
+            #             # Plot the image with the paths (displacement vectors)
+            #             image_with_path = plot_path_on_image(current_image, current_path, scale=1)
+            #             print(f"Step {step_count}: Following path, {len(current_path)} displacement vectors")
+                    
+            #         step_count += 1
+            #     cv2.waitKey(0)
+            #     cv2.destroyAllWindows()
+            #     break
+            #     #is one if the proximity sensors doesn't detect anything under the robot
+            #     #-> TODO: get this info from motion_control
+            #     if floor_not_detected:
+            #         state = State.KIDNAPPING
+            #         just_changed_state = True
+            #     #-> TODO: get this info from motion_control/if we are doing the steps computation here -> do it here
+            #     if reached:
+            #         state = State.GOAL_REACHED
+            # elif state == State.KIDNAPPING:
+            #     if just_changed_state:
+            #         just_changed_state = False
+            #         print("Entering Kidnapping State")
+            #         # TODO: kill the image with the path to show that the robot is lost
+            #         current_path = None
+            #         step_count = 0
+
+            #     robot_detected = v.get_thymio_pos() is not None
+
+            #     #-> TODO: get this info from motion_control
+            #     if robot_detected and floor_detected:
+            #         time.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
+            #         state = State.GRID_CREATION
+            #         just_changed_state = True
+            # elif state == State.GOAL_REACHED:
+            #     print("Goal Reached State")
+            #     #potentialy do some celebration and show on the screen the mistake due to uncertainties (or just say it at the presentation)
+            #     # TODO: STOP robot
+
+            #     #Wait finish signal
+            #     cv2.waitKey(0)
+            #     cv2.destroyAllWindows()
+            #     break
+
+    finally:
+        await node.set_variables(motors(0, 0))
+        await node.unlock()
 
 
 
