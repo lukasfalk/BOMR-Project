@@ -109,6 +109,7 @@ def main():
             gnav.display_grid_with_path(current_path)
             gnav.display_colored_grid()
             print("A* path length =", len(current_path)-1, "\n", current_path)
+            vector_path = gnav.vectors_for_displacement(current_path)
             # TODO: gnav -> find the array of vectors (deplacement at step k)
             # current_path should be a list of displacement vectors (or steps)
             # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
