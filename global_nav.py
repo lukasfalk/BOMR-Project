@@ -77,7 +77,7 @@ class GlobalNavigation :
     
     #Function to verify if the robot is inside the grid and not on an obstacle.
     def verification(self):
-        col, row = self.Start
+        row, col = self.Start
         print("Ce qu'on check à droite : ", -self.robot_size + col)
         print("Ce qu'on check à gauche : ", self.robot_size + col)
         for i in range(-self.robot_size + row, row + self.robot_size):
