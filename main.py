@@ -105,8 +105,8 @@ def main():
             v.vision(5,90,False)
             gnav = GlobalNavigation(v)
             current_path, explored, opertation_count = gnav.grid_search()
-            grid_with_path = gnav.display_grid_with_path()
-            gnav.display_colored_grid(grid_with_path)
+            gnav.display_grid_with_path()
+            gnav.display_colored_grid()
             # TODO: gnav -> find the array of vectors (deplacement at step k)
             # current_path should be a list of displacement vectors (or steps)
             # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
