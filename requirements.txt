@@ -9,3 +9,5 @@ numpy
 scipy
 jupyter_contrib_nbextensions jupyter_nbextensions_configurator
 https://github.com/ipython-contrib/jupyter_contrib_nbextensions/tarball/master
+tdmclient --upgrade
+tk-tools
