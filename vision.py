@@ -16,11 +16,6 @@ Aruco size -> 5cm and max Robot size -> 12cm => cell size
 
 class Vision:
     def __init__(self):
-        '''
-        self.cap = None        # public
-        self._grid = None      # protected
-        self.__secret = 42     # private
-        '''
         #Variables for Vision
         self.grid = None 
         self.thymio_pos = None
@@ -213,7 +208,8 @@ class Vision:
             x_grid = min(max(x_grid, 0), grid_Nx-1)
             y_grid = min(max(y_grid, 0), grid_Ny-1)
 
-            self.grid[x_grid,y_grid] = i+2# start => 2 and goal => 3 #to plot it
+            #self.grid[x_grid,y_grid] = i+2# start => 2 and goal => 3 #to plot it
+            self.grid[y_grid,x_grid] = i+2# start => 2 and goal => 3 #to plot it
             if i==1:
                 self.thymio_pos = [x_grid,y_grid]
             elif i==2:
@@ -579,7 +575,7 @@ class Vision:
                     grid[i, j] = 0
                     continue
 
-                if cell>white_th:
+                if np.mean(cell)>white_th:
                     grid[i, j] = 1   #road
                 else:
                     grid[i, j] = 0   #wall
@@ -603,11 +599,56 @@ class Vision:
 
     '''
     This function detects the thymio and get its position with the (0,0) at the bottom left aruco
+    Detects aruco id 1 and returns its center position and orientation based on the aruco corners
     '''
-    def get_thymio_pos(self,frame):
-        #to use if detect_robot_orientation not sufficient
-        pos = [0,0]
-        return pos
+    def get_thymio_pos(self, frame):
+        # Convert the image to grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        parameters = cv2.aruco.DetectorParameters()
+
+        # Create the ArUco detector
+        detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
+        # Detect the markers
+        corners, ids, rejected = detector.detectMarkers(gray)
+
+        if ids is None:
+            print("No aruco markers detected")
+            return None, None, None
+
+        # Find aruco with id 1 (thymio)
+        thymio_idx = None
+        thymio_corners = None
+        
+        for idx, marker_id in enumerate(ids):
+            if marker_id[0] == 1:
+                thymio_idx = idx
+                thymio_corners = corners[idx]
+                break
+        
+        if thymio_idx is None:
+            print("Aruco id 1 (thymio) not detected")
+            return None, None, None
+        
+        # Get the center of the aruco
+        pts = thymio_corners[0]  # shape (4,2) - [top-left, top-right, bottom-right, bottom-left]
+        center = pts.mean(axis=0)
+        x, y = center[0], center[1]
+        
+        # Calculate orientation from center to top-right corner
+        # pts[1] is the top-right corner
+        top_right = pts[1]
+        dx = top_right[0] - x
+        dy = top_right[1] - y
+        angle = np.arctan2(dy, dx) * 180 / np.pi
+        
+        # Normalize angle to [-180, 180]
+        if angle < -180:
+            angle += 360
+        if angle > 180:
+            angle -= 360
+        
+        return x, y, angle
 
     '''
     Detect the robot orientation (thanks to a red line) and return it in degrees
@@ -666,7 +707,7 @@ class Vision:
 v = Vision()
 #v.vision_test(5,90)
 v.cam_centering()
-v.vision(5,90,True)
+v.vision(5,150,True)
 v.plot_grid()
 
 
