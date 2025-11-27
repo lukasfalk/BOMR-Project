@@ -248,3 +248,20 @@ class GlobalNavigation :
         plt.xlabel("X-axis (Columns)")
         plt.ylabel("Y-axis (Rows)")
         plt.show()
+
+    def vectors_for_displacement(self, path) : 
+        
+        path = np.array(path)
+
+        #[dy, dx] = [y[i+1] - y[i], x[i+1] - x[i]]
+        delta = np.diff(path, axis = 0)
+
+        #Norm between two cells in the center
+        norm = np.linalg.norm(delta, axis = 1)
+
+        #Give an angle [-Pi, Pi] with arctan(theta) = y/x
+        angles = np.arctan2(delta[:, 0], delta[:, 1]) 
+
+        vector = list(zip(norm, angles))
+
+        return vector 
