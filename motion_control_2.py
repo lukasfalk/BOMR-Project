@@ -106,30 +106,17 @@ async def move_to(client, node, dist):
 
     return
 
-async def main():
-    client = ClientAsync()
-    node = await client.wait_for_node()
-    await node.lock()
-    try:
-        await node.wait_for_variables({"prox.horizontal"})
-        await node.wait_for_variables({"prox.ground.delta"})
-
-        while True:
-            update_state(node)
-            if STATE == "KIDNAPPED":
-                await node.set_variables(motors(0, 0))
-                print("Kidnapped")
-            elif STATE == "OBSTACLE":
-                await avoid_obstacle(client, node)
-            elif STATE == "MOVE":
-                await follow_instruction(client, node)
-            else:
-                raise("State error")
-
-            await client.sleep(0.1)
-    finally:
+async def motion_control(client, node):
+    update_state(node)
+    if STATE == "KIDNAPPED":
         await node.set_variables(motors(0, 0))
-        await node.unlock()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        return True
+        print("Kidnapped")
+    elif STATE == "OBSTACLE":
+        await avoid_obstacle(client, node)
+        return True
+    elif STATE == "MOVE":
+        await follow_instruction(client, node)
+        return False
+    else:
+        raise("State error")
