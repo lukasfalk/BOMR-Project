@@ -4,7 +4,7 @@ import time
 import cv2
 
 from vision import Vision
-import global_nav #from global_nav import GlobalNavigation
+from global_nav import GlobalNavigation #from global_nav import GlobalNavigation
 # import motion_control
 # import filtering
 # import local_avoidance
@@ -92,7 +92,9 @@ def main():
     current_path = None  # Vector of displacement vectors at each step
     current_image = None
     v = None
+    gnav = None
     step_count = 0
+    current_path = None  # Will be filled with displacement vectors
     
     just_changed_state = True
     while(1):
@@ -101,16 +103,19 @@ def main():
             print("Grid Creation")
             v = Vision()
             v.vision(5,90,False)
-            
+            gnav = GlobalNavigation(v)
+            current_path, explored, opertation_count = gnav.grid_search()
+            grid_with_path = gnav.display_grid_with_path()
+            gnav.display_colored_grid(grid_with_path)
             # TODO: gnav -> find the array of vectors (deplacement at step k)
             # current_path should be a list of displacement vectors (or steps)
             # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
-            current_path = None  # Will be filled with displacement vectors
             step_count = 0
             
             state = State.GLOBAL_NAVIGATION
 
         elif state == State.GLOBAL_NAVIGATION:
+
             if just_changed_state:
                 print("Entering Global Navigation State")
                 just_changed_state = False
