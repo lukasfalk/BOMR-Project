@@ -130,13 +130,13 @@ def main():
             # or
             # TODO: plot the image with the paths
             # Get raw image and plot path at each step
-            if current_path is not None:
+            if vector_path is not None:
                 current_image = v.get_image(v._Vision__cap, False)
                 
                 if current_image is not None:
                     # Plot the image with the paths (displacement vectors)
-                    image_with_path = plot_path_on_image(current_image, current_path, scale=1)
-                    print(f"Step {step_count}: Following path, {len(current_path)} displacement vectors")
+                    image_with_path = plot_path_on_image(current_image, vector_path, scale=1)
+                    print(f"Step {step_count}: Following path, {len(vector_path)} displacement vectors")
                 
                 step_count += 1
             cv2.waitKey(0)
