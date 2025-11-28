@@ -537,15 +537,12 @@ class Vision:
         dx = top_right[0] - x
         dy = top_right[1] - y
         angle = np.arctan2(dy, dx)
-        
-        # Normalize angle to [-180, 180]
-        if angle < -np.pi:
-            angle += 2*np.pi
-        if angle > np.pi:
-            angle -= 2*np.pi
-        
-        return x, y, angle
 
+        # Normalize angle to [0, 2*pi)
+        angle = angle % (2 * np.pi)
+
+        return x, y, angle
+ 
     '''
     Detect the robot orientation (thanks to a red line) and return it in degrees
     '''
@@ -604,7 +601,21 @@ class Vision:
 v = Vision()
 #v.vision_test(5,90)
 v.cam_centering()
-v.vision(5,150,True)
-v.plot_grid()
-'''
+#v.vision(5,150,True)
 
+for idx in range(10):
+    print(f"Test number {idx+1}")
+    img = v.get_image(v._Vision__cap, False)
+    cv2.imshow("Debug", img)
+    x,y,theta = v.get_thymio_pos(v.get_image(v._Vision__cap,False))
+    print(f"Thymio position: x={x}, y={y}, theta={theta*180/np.pi} degrees")
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    v.cam_centering()  
+
+#v.plot_grid()
+
+ 
+
+'''
