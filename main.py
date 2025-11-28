@@ -10,7 +10,7 @@ from tdmclient import ClientAsync
 from vision import Vision
 from global_nav import GlobalNavigation #from global_nav import GlobalNavigation
 
-from motion_control_2 import motion_control, motors
+from motion_control import motion_control, motors
 # import motion_control
 # import filtering
 # import local_avoidance
@@ -130,7 +130,7 @@ async def main():
                 state = State.GLOBAL_NAVIGATION
 
             else:
-                if motion_control(client, node):
+                if motion_control(client, node, v):
                     robot_detected = v.get_thymio_pos() is not None
                     if robot_detected:
                         await client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
