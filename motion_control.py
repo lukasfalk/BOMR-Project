@@ -3,7 +3,6 @@ import numpy as np
 from tdmclient import ClientAsync
 
 from local_avoidance import *
-from vision import robot_get_thymio_pos
 
 FORWARD_SPEED = 100
 GAIN = 2
@@ -16,7 +15,7 @@ STATE = "UNKOWN"
 
 INDEX = 0
 
-robot_angle = 0 # temp, has to be replace with the vision data
+robot_angle = 0 # temp, has to be replace with the v data
 
 def motors(l, r):
     return {"motor.left.target": [int(l)], "motor.right.target": [int(r)]}
@@ -46,9 +45,9 @@ def update_state(node):
 def test_kidnapping(prox, prev_state):
     return max(prox) < KIDNAPPING_THR
 
-async def follow_instruction(client, node, vision, path):
+async def follow_instruction(client, node, path):
     #await gradient_following(client, node) # change for the instruction to follow
-    await path_following(client, node, vision, path)
+    await path_following(client, node, path)
     return
 
 async def gradient_following(client, node): # instruction for testing
@@ -61,10 +60,10 @@ async def gradient_following(client, node): # instruction for testing
     await client.sleep(0.25)
     return
 
-async def path_following(client, node, vision, path):
+async def path_following(client, node, path):
     #path = [(20, 0), (10, np.pi/2), (10, np.pi/2), (14.14, np.pi/4), (0, 3*np.pi/4)]
     while INDEX < len(path) and not test_obstacle_detected(list(node["prox.horizontal"])):
-        await angle_correction(client, node, path[INDEX][1], vision)
+        await angle_correction(client, node, path[INDEX][1])
 
         dist_count = 0
         while dist_count < path[INDEX][0] and not test_obstacle_detected(list(node["prox.horizontal"])):
@@ -74,7 +73,7 @@ async def path_following(client, node, vision, path):
         INDEX += 1
     return
 
-async def angle_correction(client, node, target_angle, vision):
+async def angle_correction(client, node, target_angle):
     # rot_speed = 4.5 / np.pi
     # if target_angle > 0:
     #     await node.set_variables(motors(-100, 100))
@@ -84,14 +83,14 @@ async def angle_correction(client, node, target_angle, vision):
     #     await client.sleep(-target_angle * rot_speed)
 
     epsilon = 1
-    _, _, robot_angle = robot_get_thymio_pos(vision.get_image(vision._Vision__cap, False))
+    _, _, robot_angle = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
     error_angle = (target_angle - robot_angle) % (2 * np.pi)
 
     while error_angle > epsilon:
         left_speed = epsilon * GAIN_ANGLE 
         right_speed = epsilon * GAIN_ANGLE
         await node.set_variables(motors(left_speed, right_speed))
-        _, _, robot_angle = robot_get_thymio_pos(vision.get_image(vision._Vision__cap, False))
+        _, _, robot_angle = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
         error_angle = (target_angle - robot_angle) % (2 * np.pi)
     await node.set_variables(motors(0, 0))
 
@@ -104,7 +103,7 @@ async def move_to(client, node, dist):
 
     return
 
-async def motion_control(client, node, vision, path):
+async def motion_control(client, node, path):
     update_state(node)
     if STATE == "KIDNAPPED":
         await node.set_variables(motors(0, 0))
@@ -114,7 +113,7 @@ async def motion_control(client, node, vision, path):
         await avoid_obstacle(client, node)
         return True
     elif STATE == "MOVE":
-        await follow_instruction(client, node, vision, path)
+        await follow_instruction(client, node, path)
         return False
     else:
         raise("State error")
