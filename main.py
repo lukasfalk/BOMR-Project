@@ -83,13 +83,7 @@ def plot_path_on_image(image, displacements, scale):
 
 async def main():
     global v
-    client = ClientAsync()
-    node = await client.wait_for_node()
-    await node.lock()
-
-    await node.watch(variables=True)
-    await node.wait_for_variables({"prox.horizontal"})
-    await node.wait_for_variables({"prox.ground.delta"})
+    mc = await Motion_control.create()
 
     try:
 
@@ -126,7 +120,7 @@ async def main():
                 gnav.display_grid_with_path(current_path)
                 gnav.display_colored_grid()
                 print("A* path length =", len(current_path)-1, "\n", current_path)
-                vector_path = gnav.vectors_for_displacement(current_path)
+                vector_path = gnav.vectors_for_displacement(current_path) 
                 # TODO: gnav -> find the array of vectors (deplacement at step k)
                 # current_path should be a list of displacement vectors (or steps)
                 # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
@@ -135,10 +129,10 @@ async def main():
                 state = State.GLOBAL_NAVIGATION
 
             else:
-                if await motion_control(client, node, vector_path, v):
+                if await mc.fsm(vector_path, v):
                     robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
                     if robot_detected:
-                        await client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
+                        await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
                         state = State.GRID_CREATION
 
             # elif state == State.GLOBAL_NAVIGATION:
@@ -199,10 +193,7 @@ async def main():
             #     break
 
     finally:
-        await node.set_variables(motors(0, 0))
-        await node.unlock()
-
-
+        await mc.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
