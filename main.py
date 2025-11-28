@@ -113,19 +113,19 @@ async def main():
         current_path = None  # Will be filled with displacement vectors
         
         just_changed_state = True  
-        state = State.GRID_CREATION          
+        state = State.GRID_CREATION
         while(1):
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
                 v.cam_centering()
-                v.vision(5,90,True) 
-                v.plot_grid()    
+                v.vision(5,90,True)
+                v.plot_grid()
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
                 gnav.display_grid_with_path(current_path)
                 gnav.display_colored_grid()
-                print("A* path length =", len(current_path)-1, "\n", current_path)   
+                print("A* path length =", len(current_path)-1, "\n", current_path)
                 vector_path = gnav.vectors_for_displacement(current_path)
                 # TODO: gnav -> find the array of vectors (deplacement at step k)
                 # current_path should be a list of displacement vectors (or steps)
