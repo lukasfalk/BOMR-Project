@@ -213,7 +213,7 @@ class GlobalNavigation :
         # Créer une copie de la grille pour ne pas modifier l'originale
         grid_with_path = self.grid.copy()
 
-        thickness = 5  # Épaisseur pour le chemin, start et goal
+        thickness = 2  # Épaisseur pour le chemin, start et goal
         half_thickness = thickness // 2
 
         # Marquer le chemin sur la grille avec épaisseur
@@ -254,7 +254,7 @@ class GlobalNavigation :
         cmap = ListedColormap(['black', 'white', 'yellow', 'red', 'blue']) 
 
     
-        plt.imshow(self.grid, cmap=cmap, origin='upper')
+        plt.imshow(self.grid, cmap=cmap, origin='upper', aspect='equal')
 
         # Add lines between cells
         ax = plt.gca()
@@ -280,6 +280,11 @@ class GlobalNavigation :
         #Give an angle [-Pi, Pi] with arctan(theta) = y/x
         angles = np.arctan2(delta[:, 0], delta[:, 1]) 
 
-        vector = list(zip(norm, angles))
+        # If cell_size is available, convert norms to cm
+        if hasattr(self, 'cell_size') and self.cell_size is not None:
+            norm_cm = norm * self.cell_size
+            vector = list(zip(norm_cm, angles))
+        else:
+            vector = list(zip(norm, angles))
 
         return vector 

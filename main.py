@@ -129,8 +129,8 @@ async def main():
                 state = State.GLOBAL_NAVIGATION
 
             else:
-                if motion_control(client, node, current_path):
-                    robot_detected = v.get_thymio_pos() is not None
+                if await motion_control(client, node, current_path):
+                    robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
                     if robot_detected:
                         await client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
                         state = State.GRID_CREATION
