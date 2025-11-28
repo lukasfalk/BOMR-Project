@@ -28,7 +28,7 @@ class Vision:
         self.wall_dilation = 0 #0 by default -> used in get_grid()
 
         # Open camera (0 = first camera USB detected)
-        self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
+        self.__cap = cv2.VideoCapture(1,cv2.CAP_DSHOW)
         self.__goal_end = np.zeros((2,2)) #1 pt -> (x,y) -> NOT (y,x) (line first and column then)
 
         if not self.__cap.isOpened():
@@ -203,7 +203,7 @@ class Vision:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        self.grid = self.get_grid(0,0,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
+        self.grid = self.get_grid(100,200,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
 
         grid_Ny, grid_Nx = self.grid.shape
         height, width = frame_cropped.shape[:2]

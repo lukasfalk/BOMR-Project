@@ -107,6 +107,7 @@ async def main():
         current_path = None  # Will be filled with displacement vectors
         
         just_changed_state = True
+        state = State.GRID_CREATION
         while(1):
 
             if state == State.GRID_CREATION:
@@ -198,4 +199,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
