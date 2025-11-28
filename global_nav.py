@@ -280,6 +280,11 @@ class GlobalNavigation :
         #Give an angle [-Pi, Pi] with arctan(theta) = y/x
         angles = np.arctan2(delta[:, 0], delta[:, 1]) 
 
-        vector = list(zip(norm, angles))
+        # If cell_size is available, convert norms to cm
+        if hasattr(self, 'cell_size') and self.cell_size is not None:
+            norm_cm = norm * self.cell_size
+            vector = list(zip(norm_cm, angles))
+        else:
+            vector = list(zip(norm, angles))
 
         return vector 
