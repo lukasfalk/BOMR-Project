@@ -539,7 +539,7 @@ class Vision:
         angle = np.arctan2(dy, dx)
 
         # Normalize angle to [0, 2*pi)
-        angle = angle % (2 * np.pi)
+        #angle = angle % (2 * np.pi)
 
         return x, y, angle
  

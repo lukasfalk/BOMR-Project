@@ -6,8 +6,7 @@ from local_avoidance import *
 
 FORWARD_SPEED = 100
 GAIN = 2
-GAIN_AVD = 5
-GAIN_ANGLE = 5
+GAIN_ANGLE = 60
 
 KIDNAPPING_THR = 40
 
@@ -43,14 +42,16 @@ def update_state(node):
     return
 
 def test_kidnapping(prox, prev_state):
+    global KIDNAPPING_THR
     return max(prox) < KIDNAPPING_THR
 
-async def follow_instruction(client, node, path):
+async def follow_instruction(client, node, path, v):
     #await gradient_following(client, node) # change for the instruction to follow
-    await path_following(client, node, path)
+    await path_following(client, node, path, v)
     return
 
 async def gradient_following(client, node): # instruction for testing
+    global GAIN, FORWARD_SPEED
     prox_gnd = list(node["prox.ground.delta"])
     grad = prox_gnd[1] - prox_gnd[0]
     print(f'prox = {prox_gnd} ; grad = {grad}')
@@ -60,20 +61,24 @@ async def gradient_following(client, node): # instruction for testing
     await client.sleep(0.25)
     return
 
-async def path_following(client, node, path):
+async def path_following(client, node, path, v):
+    global INDEX
     #path = [(20, 0), (10, np.pi/2), (10, np.pi/2), (14.14, np.pi/4), (0, 3*np.pi/4)]
+    path = [(10, 0), (10, np.pi/2), (10, np.pi), (10, -np.pi/2)]
     while INDEX < len(path) and not test_obstacle_detected(list(node["prox.horizontal"])):
-        await angle_correction(client, node, path[INDEX][1])
+        await angle_correction(client, node, path[INDEX][1], v)
 
         dist_count = 0
         while dist_count < path[INDEX][0] and not test_obstacle_detected(list(node["prox.horizontal"])):
             await move_to(client, node, 1)
+            print(f"move dist = {dist_count}")
             dist_count += 1
 
         INDEX += 1
     return
 
-async def angle_correction(client, node, target_angle):
+async def angle_correction(client, node, target_angle, v):
+    global GAIN_ANGLE
     # rot_speed = 4.5 / np.pi
     # if target_angle > 0:
     #     await node.set_variables(motors(-100, 100))
@@ -82,17 +87,29 @@ async def angle_correction(client, node, target_angle):
     #     await node.set_variables(motors(100, -100))
     #     await client.sleep(-target_angle * rot_speed)
 
-    epsilon = 1
+    epsilon = 0.1
     _, _, robot_angle = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
-    error_angle = (target_angle - robot_angle) % (2 * np.pi)
+    error_angle = (target_angle - robot_angle)
+    if error_angle > np.pi:
+        error_angle = error_angle - 2 * np.pi
+    if error_angle < -np.pi:
+        error_angle = error_angle + 2 * np.pi
 
-    while error_angle > epsilon:
-        left_speed = epsilon * GAIN_ANGLE 
-        right_speed = epsilon * GAIN_ANGLE
+    while abs(error_angle) > epsilon:
+        left_speed = error_angle * GAIN_ANGLE 
+        right_speed = - error_angle * GAIN_ANGLE
+        print(f"angle target = {target_angle}; angle robot = {robot_angle}; error = {error_angle}")
         await node.set_variables(motors(left_speed, right_speed))
         _, _, robot_angle = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
-        error_angle = (target_angle - robot_angle) % (2 * np.pi)
+        error_angle = (target_angle - robot_angle)
+        if error_angle > np.pi:
+            error_angle = error_angle - 2 * np.pi
+        if error_angle < -np.pi:
+            error_angle = error_angle + 2 * np.pi
+        await client.sleep(0.2)
     await node.set_variables(motors(0, 0))
+    print("Robot aligned to target!")
+    await client.sleep(1)
 
 async def move_to(client, node, dist):
     speed = 1 / 3.5
@@ -103,7 +120,7 @@ async def move_to(client, node, dist):
 
     return
 
-async def motion_control(client, node, path):
+async def motion_control(client, node, path, v):
     update_state(node)
     if STATE == "KIDNAPPED":
         await node.set_variables(motors(0, 0))
@@ -113,7 +130,7 @@ async def motion_control(client, node, path):
         await avoid_obstacle(client, node)
         return True
     elif STATE == "MOVE":
-        await follow_instruction(client, node, path)
+        await follow_instruction(client, node, path, v)
         return False
     else:
         raise("State error")

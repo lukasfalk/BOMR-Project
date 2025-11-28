@@ -10,14 +10,15 @@ from tdmclient import ClientAsync
 from vision import Vision
 from global_nav import GlobalNavigation #from global_nav import GlobalNavigation
 
-from motion_control import motion_control, motors
+from motion_control import *
 # import motion_control
 # import filtering
 # import local_avoidance
 
 v = Vision()
 
-from enum import Enum   
+from enum import Enum  
+
 class State(Enum):
     GRID_CREATION = 0
     GLOBAL_NAVIGATION = 1
@@ -81,9 +82,14 @@ def plot_path_on_image(image, displacements, scale):
     return image_with_path
 
 async def main():
+    global v
     client = ClientAsync()
     node = await client.wait_for_node()
     await node.lock()
+
+    await node.watch(variables=True)
+    await node.wait_for_variables({"prox.horizontal"})
+    await node.wait_for_variables({"prox.ground.delta"})
 
     try:
 
@@ -106,20 +112,20 @@ async def main():
         step_count = 0
         current_path = None  # Will be filled with displacement vectors
         
-        just_changed_state = True
-        state = State.GRID_CREATION
+        just_changed_state = True  
+        state = State.GRID_CREATION          
         while(1):
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
                 v.cam_centering()
-                v.vision(5,90,True)
-                v.plot_grid()
+                v.vision(5,90,True) 
+                v.plot_grid()    
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
                 gnav.display_grid_with_path(current_path)
                 gnav.display_colored_grid()
-                print("A* path length =", len(current_path)-1, "\n", current_path)
+                print("A* path length =", len(current_path)-1, "\n", current_path)   
                 vector_path = gnav.vectors_for_displacement(current_path)
                 # TODO: gnav -> find the array of vectors (deplacement at step k)
                 # current_path should be a list of displacement vectors (or steps)
@@ -129,7 +135,7 @@ async def main():
                 state = State.GLOBAL_NAVIGATION
 
             else:
-                if await motion_control(client, node, current_path):
+                if await motion_control(client, node, vector_path, v):
                     robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
                     if robot_detected:
                         await client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
