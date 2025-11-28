@@ -203,7 +203,7 @@ class Vision:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        self.grid = self.get_grid(100,200,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
+        self.grid = self.get_grid(70,70,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
 
         grid_Ny, grid_Nx = self.grid.shape
         height, width = frame_cropped.shape[:2]
