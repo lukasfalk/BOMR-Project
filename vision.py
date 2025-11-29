@@ -158,11 +158,12 @@ class Vision:
         half_size=2
         for dy in range(-half_size, half_size + 1):
             for dx in range(-half_size, half_size + 1):
-                ny = int(self.thymio_pos[1]) + dy
-                nx = int(self.thymio_pos[0]) + dx
-                ny2 = int(self.goal[1]) + dy
-                nx2 = int(self.goal[0]) + dx
-                
+                # Since positions are [row, col] -> row == y, col == x
+                ny = int(self.thymio_pos[0]) + dy
+                nx = int(self.thymio_pos[1]) + dx
+                ny2 = int(self.goal[0]) + dy
+                nx2 = int(self.goal[1]) + dx
+
                 # Vérifie que l'on reste dans les limites de l'image
                 if 0 <= ny < image_cropped.shape[0] and 0 <= nx < image_cropped.shape[1]:
                     image_cropped[ny, nx] = [0, 255, 0]  # green (start)
@@ -203,7 +204,7 @@ class Vision:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        self.grid = self.get_grid(70,70,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
+        self.grid = self.get_grid(20,30,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
 
         grid_Ny, grid_Nx = self.grid.shape
         height, width = frame_cropped.shape[:2]
@@ -220,9 +221,11 @@ class Vision:
             y_grid = min(max(y_grid, 0), grid_Ny-1)
 
             if i==1:
-                self.thymio_pos = [x_grid,y_grid]
+                # Store positions in (row, col) == (y, x) to match numpy indexing
+                self.thymio_pos = [y_grid, x_grid]
             elif i==2:
-                self.goal = [x_grid,y_grid]
+                # Store positions in (row, col) == (y, x)
+                self.goal = [y_grid, x_grid]
         
 
     '''
@@ -538,8 +541,9 @@ class Vision:
         dy = top_right[1] - y
         angle = np.arctan2(dy, dx)
 
-        # Normalize angle to [0, 2*pi)
-        angle = angle % (2 * np.pi)
+        # Normalize angle to [-pi, pi]
+        if angle > np.pi:
+            angle -= 2 * np.pi
 
         return x, y, angle
     
@@ -633,6 +637,7 @@ class Vision:
         return None, None, cm_to_pixel, None
 
 #test
+
 '''
 v = Vision()
 #v.vision_test(5,90)
@@ -651,7 +656,6 @@ for idx in range(10):
     v.cam_centering()  
 
 #v.plot_grid()
-
+'''
  
 
-'''
