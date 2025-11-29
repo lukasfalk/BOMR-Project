@@ -28,7 +28,7 @@ class Vision:
         self.wall_dilation = 0 #0 by default -> used in get_grid()
 
         # Open camera (0 = first camera USB detected)
-        self.__cap = cv2.VideoCapture(1,cv2.CAP_DSHOW)
+        self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
         self.__goal_end = np.zeros((2,2)) #1 pt -> (x,y) -> NOT (y,x) (line first and column then)
 
         if not self.__cap.isOpened():
