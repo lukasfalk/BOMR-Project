@@ -367,22 +367,22 @@ class Vision:
     '''
     def cut_from_aruco(self,frame,centers):
 
-        # --- Calcul du rectangle minimal ---
+        #Minimal rectangle around the centers
         rect = cv2.minAreaRect(centers)     # (center,(w,h),angle)
         box = cv2.boxPoints(rect)           # 4 coins du rectangle
         box = box.astype(np.float32) 
 
-        # Calculate actual distances between corners to preserve aspect ratio
+        #Calculate actual distances between corners to preserve aspect ratio
         w = int(np.round(np.linalg.norm(box[1] - box[0])))
         h = int(np.round(np.linalg.norm(box[2] - box[1])))
 
         if w == 0 or h == 0:
-            print("Rectangle invalide.")
+            print("Invalid rectangle dimensions for cropping.")
             return None
 
         dst_pts = np.array([[0,0],[w,0],[w,h],[0,h]], dtype="float32")
         M = cv2.getPerspectiveTransform(box.astype("float32"), dst_pts)
-        # Apply borderMode to reduce distortion at the edges
+        #Apply borderMode to reduce distortion at the edges
         cropped_frame = cv2.warpPerspective(frame, M, (w, h), borderMode=cv2.BORDER_REFLECT)
         return cropped_frame,M
 
@@ -392,7 +392,7 @@ class Vision:
 
     zero means black -> wall
     one means white -> road
-    Advice: use the default case with 0,0
+    Advice: do not use the default case with 0,0 because the A* will be very long to compute
     '''
     def get_grid(self,grid_Nx,grid_Ny,frame,white_th):
         height, width, _ = frame.shape
@@ -542,59 +542,95 @@ class Vision:
         angle = angle % (2 * np.pi)
 
         return x, y, angle
- 
-    '''
-    Detect the robot orientation (thanks to a red line) and return it in degrees
-    '''
-    def detect_robot_orientation(self,frame):
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    
+    def get_start_pos_and_cm_per_pixel(self, frame, aruco_real_size_cm=5.3):
+        """
+        Detecte l'ArUco d'id 1 (start) dans l'image fournie et renvoie la position
+        de départ en centimètres ainsi que le facteur `pixels par cm` (cm_to_pixel).
 
-        # Red mask for the robot direction (two ranges)
-        lower1 = np.array([0, 120, 90])
-        upper1 = np.array([10, 255, 255])
+        - frame: image BGR (numpy array)
+        - aruco_real_size_cm: taille réelle d'un ArUco en cm (défaut 5.2)
 
-        lower2 = np.array([170, 120, 90])
-        upper2 = np.array([180, 255, 255])
+                Retourne: (x_cm, y_cm, cm_to_pixel, orientation_rad)
+                - x_cm, y_cm: position du centre de l'ArUco id 1 en centimètres, référentiel
+                    avec origine en bas à gauche de l'image (comme attendu par `plot_path_on_image`).
+                - cm_to_pixel: pixels par cm (float). Si impossible, tente d'utiliser
+                    les valeurs calculées précédemment (`self.__cm_per_pixel_after`),
+                    sinon retourne None pour ce champ.
+                - orientation_rad: orientation de l'ArUco id 1 en radians, mesurée par
+                    rapport à l'horizontale de l'image (angle entre centre->top-right et l'axe x).
+        """
+        # Convert to grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        parameters = cv2.aruco.DetectorParameters()
 
-        mask = cv2.bitwise_or(
-            cv2.inRange(hsv, lower1, upper1),
-            cv2.inRange(hsv, lower2, upper2)
-        )
+        detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
+        corners, ids, rejected = detector.detectMarkers(gray)
 
-        # Hough transform to detect line
-        lines = cv2.HoughLinesP(mask, 1, np.pi/180, threshold=10, minLineLength=5, maxLineGap=5)
+        cm_to_pixel = None
 
+        if ids is None:
+            # No markers detected -> try to fallback on previously computed value
+            if getattr(self, '_Vision__cm_per_pixel_after', None) is not None and self._Vision__cm_per_pixel_after > 0:
+                # __cm_per_pixel_after stores cm per pixel, so invert
+                cm_to_pixel = 1.0 / self._Vision__cm_per_pixel_after
+            else:
+                print("No aruco markers detected and no cached scale available")
+                return None, None, None, None
 
-        #Apply mask red
-        frame_filtered = frame.copy()
-        frame_filtered[mask > 0] = [0, 0, 255] #RGB blue
-        '''
-        #visualize
-        cv2.imshow('Red filter', frame_filtered)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        '''
+            print("No markers detected in frame: falling back to cached scale")
 
-        if lines is None:
-            print("Robot line not detected")
-            return -1,-1,-1
+        else:
+            # Compute mean pixel size of detected ArUco to get scale
+            aruco_pixel_sizes = []
+            for c, i in zip(corners, ids):
+                pts = c[0]
+                pixel_width = np.linalg.norm(pts[0] - pts[1])
+                pixel_height = np.linalg.norm(pts[1] - pts[2])
+                aruco_pixel_sizes.append((pixel_width + pixel_height) / 2)
 
-        #Choose the longest line to avoid small color errors
-        line = max(lines, key=lambda L: np.hypot(L[0][2] - L[0][0], L[0][3] - L[0][1]))[0]
+            if len(aruco_pixel_sizes) > 0:
+                mean_pixels = np.mean(aruco_pixel_sizes)
+                if mean_pixels > 0:
+                    # pixels per cm
+                    cm_to_pixel = mean_pixels / aruco_real_size_cm
+                    # store inverse if useful elsewhere
+                    self.__cm_per_pixel_after = aruco_real_size_cm / mean_pixels
 
-        x1, y1, x2, y2 = line
+        # Now try to find id 1 and compute its position in cm with origin at bottom-left
+        if ids is not None:
+            for idx, marker_id in enumerate(ids):
+                if marker_id[0] == 1:
+                    pts = corners[idx][0]
+                    center_px = pts.mean(axis=0)
+                    x_px = float(center_px[0])
+                    y_px_top = float(center_px[1])
 
-        angle = np.arctan2(y2 - y1, x2 - x1) * 180/np.pi
+                    # If we still don't have cm_to_pixel, try cached value
+                    if cm_to_pixel is None:
+                        if getattr(self, '_Vision__cm_per_pixel_after', None) is not None and self._Vision__cm_per_pixel_after > 0:
+                            cm_to_pixel = 1.0 / self._Vision__cm_per_pixel_after
+                        else:
+                            print("Scale unavailable to convert pixels to cm")
+                            return None, None, None
 
-        #Robot orientation normalized to [-180,180]
-        if angle < -180: angle += 360
-        if angle > 180: angle -= 360
+                    # Convert pixels to cm. x: left->right, y: bottom->top
+                    x_cm = x_px / cm_to_pixel
+                    y_cm = (frame.shape[0] - y_px_top) / cm_to_pixel
 
-        #compute robot center
-        cx = (x1 + x2) // 2
-        cy = (y1 + y2) // 2
+                    # Compute orientation of the marker (center -> top-right)
+                    top_right = pts[1]
+                    dx = top_right[0] - center_px[0]
+                    dy = top_right[1] - center_px[1]
+                    orientation = np.arctan2(dy, dx)  # radians
 
-        return cx, cy, angle
+                    return x_cm, y_cm, cm_to_pixel, orientation
+
+        # If we reach here, id 1 not detected
+        print("Aruco id 1 (start) not detected in frame")
+        # Return None for position and orientation but cm_to_pixel if available
+        return None, None, cm_to_pixel, None
 
 #test
 '''
