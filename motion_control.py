@@ -46,22 +46,16 @@ class Motion_control:
     def update_state(self):
         prox_h = list(self.node["prox.horizontal"])
         prox_gnd = list(self.node["prox.ground.delta"])
-        # print(f'Prox = {prox_h}')
-        # print(f'Prox gnd = {prox_gnd}')
-
 
         if self.test_kidnapping(prox_gnd):
             self.state = "KIDNAPPED"
-            #print(f'State updated to {self.state}.')
             return
         elif test_no_obstacle(prox_h) and self.state != "MOVE":
             self.state = "MOVE"
-            #print(f'State updated to {self.state}.')
         elif test_obstacle_detected(prox_h) and self.state != "OBSTACLE":
             self.state = "OBSTACLE"
-            #print(f'State updated to {self.state}.')
-        # else:
-        #     print("No state change.")
+        else:
+            raise("State error")
         return
 
     def test_kidnapping(self, prox):
@@ -69,78 +63,58 @@ class Motion_control:
         return max(prox) < KIDNAPPING_THR
 
     async def follow_instruction(self, path, v):
-        #await gradient_following(client, node) # change for the instruction to follow
         await self.path_following(path, v)
-        return
-
-    async def gradient_following(self): # instruction for testing
-        global GAIN, FORWARD_SPEED
-        prox_gnd = list(self.node["prox.ground.delta"])
-        grad = prox_gnd[1] - prox_gnd[0]
-        print(f'prox = {prox_gnd} ; grad = {grad}')
-        left_speed = FORWARD_SPEED - grad * GAIN
-        right_speed = FORWARD_SPEED + grad * GAIN
-        await self.node.set_variables(self.motors(left_speed, right_speed))
-        await self.client.sleep(0.25)
-        return
 
     async def path_following(self, path, v):
         #path = [(20, 0), (10, np.pi/2), (10, np.pi/2), (14.14, np.pi/4), (0, 3*np.pi/4)]
-        path = [(10, 0), (10, np.pi/2), (10, np.pi), (10, -np.pi/2)]
-        while self.path_idx < len(path) and not test_obstacle_detected(list(self.node["prox.horizontal"])):
-            await self.angle_correction(path[self.path_idx][1], v)
+        #path = [(10, 0), (10, np.pi/2), (10, np.pi), (10, -np.pi/2)]
 
+        while not test_obstacle_detected(list(self.node["prox.horizontal"])):
+            if await self.angle_correction(path[1], v):
+                return
             dist_count = 0
-            while dist_count < path[self.path_idx][0] and not test_obstacle_detected(list(self.node["prox.horizontal"])):
+            while dist_count < path[0] and not test_obstacle_detected(list(self.node["prox.horizontal"])):
                 await self.move_to(1)
                 print(f"move dist = {dist_count}")
                 dist_count += 1
-
-            self.path_idx += 1
-        return
+            await self.node.set_variables(self.motors(0, 0))
 
     async def angle_correction(self, target_angle, v):
         global GAIN_ANGLE
-        # rot_speed = 4.5 / np.pi
-        # if target_angle > 0:
-        #     await node.set_variables(motors(-100, 100))
-        #     await client.sleep(target_angle * rot_speed)
-        # elif target_angle < 0:
-        #     await node.set_variables(motors(100, -100))
-        #     await client.sleep(-target_angle * rot_speed)
-
         epsilon = 0.1
-        error_angle = self.compute_error_angle(target_angle, v)
+        robot_detected, error_angle = self.compute_error_angle(target_angle, v)
+        if not robot_detected:
+            return True
 
         while abs(error_angle) > epsilon:
             left_speed = error_angle * GAIN_ANGLE 
             right_speed = - error_angle * GAIN_ANGLE
             await self.node.set_variables(self.motors(left_speed, right_speed))
-            error_angle = self.compute_error_angle(target_angle, v)
+            robot_detected, error_angle = self.compute_error_angle(target_angle, v)
+            if not robot_detected:
+                return True
             await self.client.sleep(0.2)
-        await self.node.set_variables(self.motors(0, 0))
-        print("Robot aligned to target!")
-        await self.client.sleep(1)
+        await self.node.set_variables(self.motors(0, 0))    # 
+        print("Robot aligned to target!")                   # can be deleted
+        await self.client.sleep(1)                          # 
+        return False
     
     def compute_error_angle(self, target, v):
         _, _, robot = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
         if robot == None:
-            raise("Robot not detected")
+            return False, 0
         error = target - robot
         if error > np.pi:
             error = error - 2 * np.pi
         if error < -np.pi:
             error = error + 2 * np.pi
         print(f"angle target = {target}; angle robot = {robot}; error = {error}")
-        return error
+        return True, error
 
     async def move_to(self, dist):
         speed = 1 / 3.5
-
         await self.node.set_variables(self.motors(100, 100))
         await self.client.sleep(dist * speed)
-        #await node.set_variables(motors(0, 0))
-
         return
 
     async def fsm(self, path, v):
