@@ -55,7 +55,7 @@ class GlobalNavigation :
         row, col = vision.thymio_pos
         self.Start = row, col
         row, col = vision.goal
-        self.Goal = col, row
+        self.Goal = row, col
         self.grid = vision.grid
         self.cell_size = vision.cell_size
         self.thymio_size = 12
