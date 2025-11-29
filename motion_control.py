@@ -54,8 +54,6 @@ class Motion_control:
             self.state = "MOVE"
         elif test_obstacle_detected(prox_h) and self.state != "OBSTACLE":
             self.state = "OBSTACLE"
-        else:
-            raise("State error")
         return
 
     def test_kidnapping(self, prox):
@@ -78,6 +76,7 @@ class Motion_control:
                 print(f"move dist = {dist_count}")
                 dist_count += 1
             await self.node.set_variables(self.motors(0, 0))
+            return
 
     async def angle_correction(self, target_angle, v):
         global GAIN_ANGLE
