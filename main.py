@@ -240,7 +240,7 @@ async def main():
 
             elif state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
                 #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
-                pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
+                #pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
                 #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
                 #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
                 
@@ -259,14 +259,12 @@ async def main():
                     # convert pixel coords to cm and to bottom-left origin
                     x_cm_robot = x_px / cm_per_pixel_global
                     y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
-                    robot_pos = np.array([x_cm_robot, y_cm_robot])
+                    robot_pos = (x_cm_robot, y_cm_robot)
                     #print(f"rob pos = {robot_pos}")
 
-                    if abs((robot_pos - pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs((robot_pos - pos_to_goal[-1])[1]) < GOAL_EPS_CM:
+                    if abs(np.subtract(robot_pos, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(robot_pos, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
                             print(f"Robot at {robot_pos} and goal is {pos_to_goal[-1]}")
-                            print(f"Goal reached")
                             state = State.GOAL_REACHED
-                            return
                     
                     if step_count < len(pos_to_goal):
 
@@ -276,7 +274,7 @@ async def main():
 
                         elif target_pos is not None:
                             error_pos = np.linalg.norm(target_pos) - np.linalg.norm(robot_pos)
-                        print(f"Error pos = {error_pos}")
+                        print(f"Error pos = {error_pos} \n")
 
                         target_pos = pos_to_goal[step_count]
 
@@ -305,7 +303,10 @@ async def main():
                     elif state != State.GOAL_REACHED: # try to reach again the goal
                         step_count -= 1
 
-
+            if state == State.GOAL_REACHED:
+                print(f"Goal reached")
+                await mc.node.set_variables(mc.motors(0, 0))
+                return
 
                 # #Wait finish signal
                 # cv2.waitKey(0)
