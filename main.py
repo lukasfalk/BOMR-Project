@@ -170,7 +170,7 @@ async def main():
                 # gnav -> find the array of vectors (deplacement at step k)
                 # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
                 #Caution: theta is in radians AND relative to the origin and not between steps -> theta_k != theta_k+1 - theta_k
-                vector_path = gnav.vectors_for_displacement(current_path) 
+                vector_path = gnav.vectors_for_displacement(current_path)
                 print("Vector path 0 (norm, angle):", vector_path)
                 distance_directe_result = distance_directe(vector_path, degrees=False)
                 print(f"Direct distance to goal after following path: {distance_directe_result:.2f} cm")
@@ -211,105 +211,135 @@ async def main():
                             vector_path_biased.append((norm, biased_angle))
 
                         image_with_path = plot_path_on_image(current_image, vector_path_inversed, start_pos, cm_per_pixel)
-                        print(f"Step {step_count}: Following path, {len(vector_path_biased)} displacement vectors (angles biased by {start_orientation:.3f} rad)")
             
                 # save scale (pixels per cm) for later conversions
                 cm_per_pixel_global = cm_per_pixel
 
-                #vector_path = [(3, 0), (3, 0),(3, 0),(3, 0)]
-
-                next_step = vector_path[0]
+                #vector_path_inversed = [(0, 0), (0, np.pi),(0, np.pi),(0, np.pi)]
+                next_step = None
+                pos_to_goal = [(float(start_pos[0]), float(start_pos[1]))]
+                for norm, angle in vector_path_inversed:
+                    prev_x, prev_y = pos_to_goal[-1]
+                    x = prev_x + norm * np.cos(angle) 
+                    y = prev_y + norm * np.sin(angle)  
+                    pos_to_goal.append((x, y))
                 state = State.GLOBAL_NAVIGATION
 
+                target_pos = None
+
             elif state == State.GLOBAL_NAVIGATION:
-                print("Global Navigation")
-                print(f"Next step {step_count} (norm, angle): {next_step}")
-                if await mc.fsm(next_step, v):
-                    print("Kidnapped during path following")
-                    robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
-                    if robot_detected:
-                        print("Robot detected after kidnapping")
-                        await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
-                        state = State.GRID_CREATION
-                else:
-                    #TODO: calculate next displacement vector thanks to the position feedback
-                    #TODO: if reached the goal -> state = GOAL_REACHED
-                    
-                    # get current image and thymio position in pixels
-                    frame = v.get_image(v._Vision__cap, False)
-                    pos_px = v.get_thymio_pos(frame)
+                
+                #TODO: calculate next displacement vector thanks to the position feedback
+                #TODO: if reached the goal -> state = GOAL_REACHED
+                pos_to_goal = [(40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
+                #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
 
-                    # pos_px is (x_px, y_px, angle) or (None, None, None)
-                    if pos_px is not None and pos_px[0] is not None:
-                        x_px, y_px, robot_angle = pos_px
+                error_pos = 0
+                
+                # get current image and thymio position in pixels
+                frame = v.get_image(v._Vision__cap, False) # first call to empty the cache
+                frame = v.get_image(v._Vision__cap, False) # second call to get the right image
+                pos_px = v.get_thymio_pos(frame)
+                if pos_px[0] != None and pos_px[1] != None and pos_px[2] != None:              
+                    x_px, y_px, robot_angle = pos_px
 
-                        # ensure we have scale (pixels per cm); try to recover if missing
-                        if cm_per_pixel_global is None:
-                            _, _, cm_per_pixel_fallback, _ = v.get_start_pos_and_cm_per_pixel(frame)
-                            cm_per_pixel_global = cm_per_pixel_fallback
+                    # ensure we have scale (pixels per cm); try to recover if missing
+                    if cm_per_pixel_global is None:
+                        _, _, cm_per_pixel_fallback, _ = v.get_start_pos_and_cm_per_pixel(frame)
+                        cm_per_pixel_global = cm_per_pixel_fallback
 
-                        if cm_per_pixel_global is None:
-                            print("Scale unavailable: cannot convert pixels to cm. Using original vector without adjustment.")
-                            if step_count < len(vector_path):
-                                next_step = vector_path[step_count]
-                                step_count += 1
+                    # convert pixel coords to cm and to bottom-left origin
+                    x_cm_robot = x_px / cm_per_pixel_global
+                    y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
+                    robot_pos = np.array([x_cm_robot, y_cm_robot])
+
+                    if abs((robot_pos - pos_to_goal[-1])[0]) < 1 and abs((robot_pos - pos_to_goal[-1])[1]) < 1:
+                            print(f"Robot at {robot_pos} and goal is {pos_to_goal[-1]}")
+                            print(f"Goal reached")
+                            state = State.GOAL_REACHED
+                            return
+
+                    if step_count < len(pos_to_goal):
+
+                        if target_pos is not None:
+                            error_pos = np.linalg.norm(target_pos) - np.linalg.norm(robot_pos)
+                            print(f"Error pos = {error_pos}")
+
+                        target_pos = pos_to_goal[step_count]
+
+                        # If robot closer to goal than next step => go one step further
+                        print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist targert-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
+                        while np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
+                            if step_count + 1 >= len(pos_to_goal):
+                                print("overflow pos_to_goal")
+                                break
                             else:
-                                print("Path completed - reached goal!")
-                                state = State.GOAL_REACHED
-                        else:
-                            # convert pixel coords to cm and to bottom-left origin
-                            x_cm_robot = x_px / cm_per_pixel_global
-                            y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
-                            pos = np.array([x_cm_robot, y_cm_robot])
-
-                            # Calculate desired position based on previous steps completed (in cm)
-                            desired_x = start_pos[0]
-                            desired_y = start_pos[1]
-                            for i in range(step_count+1):
-                                norm, angle = vector_path_inversed[i]
-                                desired_x += norm * np.cos(angle)
-                                desired_y += norm * np.sin(angle)
-
-                            next_desired_pos = np.array([desired_x, desired_y])
-                            print(f"Step {step_count}: Current pos (cm) = {pos}, Desired pos (cm) = {next_desired_pos}")
-
-                            # If robot is close enough to final goal, stop and switch state
-                            goal_x = start_pos[0]
-                            goal_y = start_pos[1]
-                            for nrm, ang in vector_path_inversed:
-                                goal_x += nrm * np.cos(ang)
-                                goal_y += nrm * np.sin(ang)
-                            goal_pos = np.array([goal_x, goal_y])
-                            dist_to_goal = np.linalg.norm(goal_pos - pos)
-                            if dist_to_goal <= GOAL_EPS_CM:
-                                print(f"Goal reached (distance {dist_to_goal:.2f} cm <= {GOAL_EPS_CM} cm). Stopping.")
-                                state = State.GOAL_REACHED
-                                continue
-
-                            # Calculate error between current and desired position
-                            error = next_desired_pos-pos
-                            print(f"Position error (cm): {error}, magnitude: {np.linalg.norm(error):.3f} cm")
-
-                            # Get next step from the path, adjusted based on real position
-                            if step_count < len(vector_path):
-                                final_x = desired_x
-                                final_y = desired_y
-                                norm, angle = vector_path[step_count]
-
-                                adjusted_vec = np.array([final_x - pos[0], final_y - pos[1]])
-                                adjusted_norm = np.linalg.norm(adjusted_vec)
-                                adjusted_angle = np.arctan2(adjusted_vec[1], adjusted_vec[0])
-
-                                next_step = (adjusted_norm, -1*(adjusted_angle+robot_angle))
-                                print(f"Next step {step_count} (adjusted): norm={adjusted_norm:.2f} cm, angle={adjusted_angle:.3f} rad")
-                                print(f"  (original would be: norm={norm:.2f} cm, angle={angle:.3f} rad)")
                                 step_count += 1
-                            else:
-                                print("Path completed - reached goal!")
-                                state = State.GOAL_REACHED
-                    else:
-                        print(f"Step {step_count}: Robot position not detected")
-                        next_step = vector_path[step_count] if step_count < len(vector_path) else None
+                                target_pos = pos_to_goal[step_count]
+
+                        dx = target_pos[0] - robot_pos[0]
+                        dy = target_pos[1] - robot_pos[1]
+                        norm = np.linalg.norm([dx, dy])
+                        angle = -np.atan2(dy, dx)
+                        next_step = (norm, angle)
+                        step_count += 1
+
+                        print(f"Robot at {robot_pos} and going to {target_pos}")
+                        print(f"Next step {step_count} (norm, angle): {next_step}")
+                        if await mc.fsm(next_step, v, error_pos):
+                            print("Kidnapped during path following")
+                            robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
+                            if robot_detected:
+                                print("Robot detected after kidnapping")
+                                await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
+                                state = State.GRID_CREATION
+                        
+                    elif state != State.GOAL_REACHED:
+                        step_count -= 1
+
+
+                            # next_desired_pos = np.array([desired_x, desired_y])
+                            # print(f"Step {step_count}: Current pos (cm) = {robot_pos}, Desired pos (cm) = {next_desired_pos}")
+
+                            # # If robot is close enough to final goal, stop and switch state
+                            # goal_x = start_pos[0]
+                            # goal_y = start_pos[1]
+                            # for nrm, ang in vector_path_inversed:
+                            #     goal_x += nrm * np.cos(ang)
+                            #     goal_y += nrm * np.sin(ang)
+                            # goal_pos = np.array([goal_x, goal_y])
+                            # dist_to_goal = np.linalg.norm(goal_pos - robot_pos)
+
+
+                            # if dist_to_goal <= GOAL_EPS_CM:
+                            #     print(f"Goal reached (distance {dist_to_goal:.2f} cm <= {GOAL_EPS_CM} cm). Stopping.")
+                            #     state = State.GOAL_REACHED
+                            #     continue
+
+                            # # Calculate error between current and desired position
+                            # error = next_desired_pos-pos
+                            # print(f"Position error (cm): {error}, magnitude: {np.linalg.norm(error):.3f} cm")
+
+                            # # Get next step from the path, adjusted based on real position
+                            # if step_count < len(vector_path):
+                            #     final_x = desired_x
+                            #     final_y = desired_y
+                            #     norm, angle = vector_path[step_count]
+
+                            #     adjusted_vec = np.array([final_x - pos[0], final_y - pos[1]])
+                            #     adjusted_norm = np.linalg.norm(adjusted_vec)
+                            #     adjusted_angle = np.arctan2(adjusted_vec[1], adjusted_vec[0])
+
+                            #     next_step = (adjusted_norm, -1*(adjusted_angle+robot_angle))
+                            #     print(f"Next step {step_count} (adjusted): norm={adjusted_norm:.2f} cm, angle={adjusted_angle:.3f} rad")
+                            #     print(f"  (original would be: norm={norm:.2f} cm, angle={angle:.3f} rad)")
+                            #     step_count += 1
+                            # else:
+                            #     print("Path completed - reached goal!")
+                            #     state = State.GOAL_REACHED
+                    # else:
+                    #     print(f"Step {step_count}: Robot position not detected")
+                    #     next_step = vector_path[step_count] if step_count < len(vector_path) else None
 
 
             # elif state == State.GLOBAL_NAVIGATION:

@@ -5,8 +5,8 @@ from tdmclient import ClientAsync
 from local_avoidance import *
 
 FORWARD_SPEED = 100
-GAIN = 2
 GAIN_ANGLE = 60
+GAIN_FWD = 5
 
 KIDNAPPING_THR = 40
 
@@ -60,19 +60,20 @@ class Motion_control:
         global KIDNAPPING_THR
         return max(prox) < KIDNAPPING_THR
 
-    async def follow_instruction(self, path, v):
-        await self.path_following(path, v)
+    async def follow_instruction(self, path, v, error_pos):
+        await self.path_following(path, v, error_pos)
+        # await self.node.set_variables(self.motors(FORWARD_SPEED, FORWARD_SPEED))
+        # await self.client.sleep(1)
+        # await self.node.set_variables(self.motors(0, 0))
+        # await self.client.sleep(10)
 
-    async def path_following(self, path, v):
-        #path = [(20, 0), (10, np.pi/2), (10, np.pi/2), (14.14, np.pi/4), (0, 3*np.pi/4)]
-        #path = [(10, 0), (10, np.pi/2), (10, np.pi), (10, -np.pi/2)]
-
+    async def path_following(self, path, v, error_pos):
         while not test_obstacle_detected(list(self.node["prox.horizontal"])):
             if await self.angle_correction(path[1], v):
                 return
             dist_count = 0
-            while dist_count < path[0] and not test_obstacle_detected(list(self.node["prox.horizontal"])):
-                await self.move_to(1)
+            while dist_count < int(path[0]) and not test_obstacle_detected(list(self.node["prox.horizontal"])):
+                await self.move_to(error_pos, 1)
                 print(f"move dist = {dist_count}")
                 dist_count += 1
             await self.node.set_variables(self.motors(0, 0))
@@ -100,6 +101,7 @@ class Motion_control:
     
     def compute_error_angle(self, target, v):
         _, _, robot = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
+        _, _, robot = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
         if robot == None:
             return False, 0
         error = target - robot
@@ -110,13 +112,15 @@ class Motion_control:
         print(f"angle target = {target}; angle robot = {robot}; error = {error}")
         return True, error
 
-    async def move_to(self, dist):
-        speed = 1 / 3.5
-        await self.node.set_variables(self.motors(100, 100))
+    async def move_to(self, error_pos, dist):
+        speed = 1 / 5
+        left_speed = FORWARD_SPEED + error_pos * GAIN_FWD
+        right_speed = FORWARD_SPEED + error_pos * GAIN_FWD
+        await self.node.set_variables(self.motors(left_speed, right_speed))
         await self.client.sleep(dist * speed)
         return
 
-    async def fsm(self, path, v):
+    async def fsm(self, path, v, error_pos):
         self.update_state()
         if self.state == "KIDNAPPED":
             await self.node.set_variables(self.motors(0, 0))
@@ -126,7 +130,7 @@ class Motion_control:
             await avoid_obstacle(self)
             return True
         elif self.state == "MOVE":
-            await self.follow_instruction(path, v)
+            await self.follow_instruction(path, v, error_pos)
             return False
         else:
             raise("State error")
