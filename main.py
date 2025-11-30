@@ -26,6 +26,7 @@ class State(Enum):
     GLOBAL_NAVIGATION = 1
     KIDNAPPING = 2
     GOAL_REACHED = 3
+    OBS_AVOIDED = 4
 
 def plot_path_on_image(image, displacements, start_pos_cm, cm_to_pixel):
     """
@@ -128,6 +129,7 @@ async def main():
     mc = await Motion_control.create()
     # threshold (cm) to consider the final goal reached
     GOAL_EPS_CM = 2.0
+    SKIP_STEPS =  2
 
     try:
 
@@ -155,6 +157,13 @@ async def main():
         state = State.GRID_CREATION
         vector_path_inversed = []
         while(1):
+            if state == State.KIDNAPPING:
+                print("Kidnapped during path following")
+                robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
+                if robot_detected:
+                    print("Robot detected after kidnapping")
+                    await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
+                    state = State.GRID_CREATION
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
@@ -194,7 +203,7 @@ async def main():
                         print("Scale unavailable: skipping path plotting")
                     else:
                         if x_cm is None or y_cm is None:
-                            print("Start position not detected: using (0,0) as fallback")
+                            #print("Start position not detected: using (0,0) as fallback")
                             start_pos = np.zeros(2)
                         else:
                             start_pos = np.array([x_cm, y_cm])
@@ -224,18 +233,16 @@ async def main():
                     y = prev_y + norm * np.sin(angle)  
                     pos_to_goal.append((x, y))
                 state = State.GLOBAL_NAVIGATION
+                print(f"Pos to goal = {pos_to_goal}")
 
                 target_pos = None
-
-            elif state == State.GLOBAL_NAVIGATION:
-                
-                #TODO: calculate next displacement vector thanks to the position feedback
-                #TODO: if reached the goal -> state = GOAL_REACHED
-                pos_to_goal = [(40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
-                #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
-
                 error_pos = 0
-                
+
+            elif state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
+                #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
+                pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
+                #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
+                v
                 # get current image and thymio position in pixels
                 frame = v.get_image(v._Vision__cap, False) # first call to empty the cache
                 frame = v.get_image(v._Vision__cap, False) # second call to get the right image
@@ -252,23 +259,28 @@ async def main():
                     x_cm_robot = x_px / cm_per_pixel_global
                     y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
                     robot_pos = np.array([x_cm_robot, y_cm_robot])
+                    #print(f"rob pos = {robot_pos}")
 
-                    if abs((robot_pos - pos_to_goal[-1])[0]) < 1 and abs((robot_pos - pos_to_goal[-1])[1]) < 1:
+                    if abs((robot_pos - pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs((robot_pos - pos_to_goal[-1])[1]) < GOAL_EPS_CM:
                             print(f"Robot at {robot_pos} and goal is {pos_to_goal[-1]}")
                             print(f"Goal reached")
                             state = State.GOAL_REACHED
                             return
-
+                    
                     if step_count < len(pos_to_goal):
 
-                        if target_pos is not None:
+                        if state == State.OBS_AVOIDED:
+                            step_count += SKIP_STEPS
+                            state = State.GLOBAL_NAVIGATION
+
+                        elif target_pos is not None:
                             error_pos = np.linalg.norm(target_pos) - np.linalg.norm(robot_pos)
-                            print(f"Error pos = {error_pos}")
+                        print(f"Error pos = {error_pos}")
 
                         target_pos = pos_to_goal[step_count]
 
                         # If robot closer to goal than next step => go one step further
-                        print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist targert-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
+                        #print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist target-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
                         while np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
                             if step_count + 1 >= len(pos_to_goal):
                                 print("overflow pos_to_goal")
@@ -276,6 +288,7 @@ async def main():
                             else:
                                 step_count += 1
                                 target_pos = pos_to_goal[step_count]
+                                print(f"Skip step {step_count - 1}")
 
                         dx = target_pos[0] - robot_pos[0]
                         dy = target_pos[1] - robot_pos[1]
@@ -285,119 +298,18 @@ async def main():
                         step_count += 1
 
                         print(f"Robot at {robot_pos} and going to {target_pos}")
-                        print(f"Next step {step_count} (norm, angle): {next_step}")
-                        if await mc.fsm(next_step, v, error_pos):
-                            print("Kidnapped during path following")
-                            robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
-                            if robot_detected:
-                                print("Robot detected after kidnapping")
-                                await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
-                                state = State.GRID_CREATION
-                        
-                    elif state != State.GOAL_REACHED:
+                        print(f"Next step {step_count-1} (norm, angle): {next_step}")
+                        state = await mc.fsm(next_step, v, error_pos, state)
+
+                    elif state != State.GOAL_REACHED: # try to reach again the goal
                         step_count -= 1
 
 
-                            # next_desired_pos = np.array([desired_x, desired_y])
-                            # print(f"Step {step_count}: Current pos (cm) = {robot_pos}, Desired pos (cm) = {next_desired_pos}")
 
-                            # # If robot is close enough to final goal, stop and switch state
-                            # goal_x = start_pos[0]
-                            # goal_y = start_pos[1]
-                            # for nrm, ang in vector_path_inversed:
-                            #     goal_x += nrm * np.cos(ang)
-                            #     goal_y += nrm * np.sin(ang)
-                            # goal_pos = np.array([goal_x, goal_y])
-                            # dist_to_goal = np.linalg.norm(goal_pos - robot_pos)
-
-
-                            # if dist_to_goal <= GOAL_EPS_CM:
-                            #     print(f"Goal reached (distance {dist_to_goal:.2f} cm <= {GOAL_EPS_CM} cm). Stopping.")
-                            #     state = State.GOAL_REACHED
-                            #     continue
-
-                            # # Calculate error between current and desired position
-                            # error = next_desired_pos-pos
-                            # print(f"Position error (cm): {error}, magnitude: {np.linalg.norm(error):.3f} cm")
-
-                            # # Get next step from the path, adjusted based on real position
-                            # if step_count < len(vector_path):
-                            #     final_x = desired_x
-                            #     final_y = desired_y
-                            #     norm, angle = vector_path[step_count]
-
-                            #     adjusted_vec = np.array([final_x - pos[0], final_y - pos[1]])
-                            #     adjusted_norm = np.linalg.norm(adjusted_vec)
-                            #     adjusted_angle = np.arctan2(adjusted_vec[1], adjusted_vec[0])
-
-                            #     next_step = (adjusted_norm, -1*(adjusted_angle+robot_angle))
-                            #     print(f"Next step {step_count} (adjusted): norm={adjusted_norm:.2f} cm, angle={adjusted_angle:.3f} rad")
-                            #     print(f"  (original would be: norm={norm:.2f} cm, angle={angle:.3f} rad)")
-                            #     step_count += 1
-                            # else:
-                            #     print("Path completed - reached goal!")
-                            #     state = State.GOAL_REACHED
-                    # else:
-                    #     print(f"Step {step_count}: Robot position not detected")
-                    #     next_step = vector_path[step_count] if step_count < len(vector_path) else None
-
-
-            # elif state == State.GLOBAL_NAVIGATION:
-
-            #     if just_changed_state:
-            #         print("Entering Global Navigation State")
-            #         just_changed_state = False
-
-
-            #     # TODO: update the image with the path to show that the robot is following it
-            #     # This replots at each time step to show robot progress
-            #     # or
-            #     # TODO: plot the image with the paths
-            #     # Get raw image and plot path at each step
-            #     if current_path is not None:
-            #         current_image = v.get_image(v._Vision__cap, False)
-                    
-            #         if current_image is not None:
-            #             # Plot the image with the paths (displacement vectors)
-            #             image_with_path = plot_path_on_image(current_image, current_path, scale=1)
-            #             print(f"Step {step_count}: Following path, {len(current_path)} displacement vectors")
-                    
-            #         step_count += 1
-            #     cv2.waitKey(0)
-            #     cv2.destroyAllWindows()
-            #     break
-            #     #is one if the proximity sensors doesn't detect anything under the robot
-            #     #-> TODO: get this info from motion_control
-            #     if floor_not_detected:
-            #         state = State.KIDNAPPING
-            #         just_changed_state = True
-            #     #-> TODO: get this info from motion_control/if we are doing the steps computation here -> do it here
-            #     if reached:
-            #         state = State.GOAL_REACHED
-            # elif state == State.KIDNAPPING:
-            #     if just_changed_state:
-            #         just_changed_state = False
-            #         print("Entering Kidnapping State")
-            #         # TODO: kill the image with the path to show that the robot is lost
-            #         current_path = None
-            #         step_count = 0
-
-            #     robot_detected = v.get_thymio_pos() is not None
-
-            #     #-> TODO: get this info from motion_control
-            #     if robot_detected and floor_detected:
-            #         time.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
-            #         state = State.GRID_CREATION
-            #         just_changed_state = True
-            # elif state == State.GOAL_REACHED:
-            #     print("Goal Reached State")
-            #     #potentialy do some celebration and show on the screen the mistake due to uncertainties (or just say it at the presentation)
-            #     # TODO: STOP robot
-
-            #     #Wait finish signal
-            #     cv2.waitKey(0)
-            #     cv2.destroyAllWindows()
-            #     break
+                # #Wait finish signal
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
+                # break
 
     finally:
         await mc.close()

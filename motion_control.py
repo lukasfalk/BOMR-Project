@@ -61,23 +61,21 @@ class Motion_control:
         return max(prox) < KIDNAPPING_THR
 
     async def follow_instruction(self, path, v, error_pos):
-        await self.path_following(path, v, error_pos)
-        # await self.node.set_variables(self.motors(FORWARD_SPEED, FORWARD_SPEED))
-        # await self.client.sleep(1)
-        # await self.node.set_variables(self.motors(0, 0))
-        # await self.client.sleep(10)
+        return await self.path_following(path, v, error_pos)
 
     async def path_following(self, path, v, error_pos):
         while not test_obstacle_detected(list(self.node["prox.horizontal"])):
             if await self.angle_correction(path[1], v):
-                return
+                return True
             dist_count = 0
-            while dist_count < int(path[0]) and not test_obstacle_detected(list(self.node["prox.horizontal"])):
+            while dist_count < int(path[0]):
+                if test_obstacle_detected(list(self.node["prox.horizontal"])):
+                    return False
                 await self.move_to(error_pos, 1)
                 print(f"move dist = {dist_count}")
                 dist_count += 1
             await self.node.set_variables(self.motors(0, 0))
-            return
+            return True
 
     async def angle_correction(self, target_angle, v):
         global GAIN_ANGLE
@@ -120,17 +118,19 @@ class Motion_control:
         await self.client.sleep(dist * speed)
         return
 
-    async def fsm(self, path, v, error_pos):
+    async def fsm(self, path, v, error_pos, s):
         self.update_state()
         if self.state == "KIDNAPPED":
             await self.node.set_variables(self.motors(0, 0))
-            return True
+            return s.KIDNAPPING
             print("Kidnapped")
         elif self.state == "OBSTACLE":
             await avoid_obstacle(self)
-            return True
+            return s.OBS_AVOIDED
         elif self.state == "MOVE":
-            await self.follow_instruction(path, v, error_pos)
-            return False
+            if not await self.follow_instruction(path, v, error_pos):
+                await avoid_obstacle(self)
+                return s.OBS_AVOIDED
+            return s.GLOBAL_NAVIGATION
         else:
             raise("State error")

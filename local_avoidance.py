@@ -1,6 +1,6 @@
 import numpy as np
 
-PROX_THR_HI = 20
+PROX_THR_HI = 2000
 PROX_THR_LO = 10
 
 def test_obstacle_detected(prox):
@@ -39,7 +39,7 @@ async def avoid_obstacle(mc):
         await mc.client.sleep(0.1)
 
     await mc.node.set_variables(mc.motors(100, 100))
-    await mc.client.sleep(1)
+    await mc.client.sleep(2)
     await mc.node.set_variables(mc.motors(0, 0))
     print("End local avoidance")
 
