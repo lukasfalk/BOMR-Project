@@ -72,7 +72,7 @@ class Motion_control:
                 if test_obstacle_detected(list(self.node["prox.horizontal"])):
                     return False
                 await self.move_to(error_pos, 1)
-                print(f"move dist = {dist_count}")
+                #print(f"move dist = {dist_count}")
                 dist_count += 1
             await self.node.set_variables(self.motors(0, 0))
             return True
@@ -93,7 +93,7 @@ class Motion_control:
                 return True
             await self.client.sleep(0.2)
         await self.node.set_variables(self.motors(0, 0))    # 
-        print("Robot aligned to target!")                   # can be deleted
+        #print("Robot aligned to target!")                   # can be deleted
         await self.client.sleep(1)                          # 
         return False
     
@@ -107,7 +107,7 @@ class Motion_control:
             error = error - 2 * np.pi
         if error < -np.pi:
             error = error + 2 * np.pi
-        print(f"angle target = {target}; angle robot = {robot}; error = {error}")
+        #print(f"angle target = {target}; angle robot = {robot}; error = {error}")
         return True, error
 
     async def move_to(self, error_pos, dist):

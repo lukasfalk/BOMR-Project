@@ -129,7 +129,7 @@ async def main():
     mc = await Motion_control.create()
     # threshold (cm) to consider the final goal reached
     GOAL_EPS_CM = 2.0
-    SKIP_STEPS =  2
+    SKIP_STEPS =  3
 
     try:
 
@@ -242,7 +242,8 @@ async def main():
                 #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
                 pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
                 #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
-                v
+                #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
+                
                 # get current image and thymio position in pixels
                 frame = v.get_image(v._Vision__cap, False) # first call to empty the cache
                 frame = v.get_image(v._Vision__cap, False) # second call to get the right image
@@ -298,7 +299,7 @@ async def main():
                         step_count += 1
 
                         print(f"Robot at {robot_pos} and going to {target_pos}")
-                        print(f"Next step {step_count-1} (norm, angle): {next_step}")
+                        print(f"Step {step_count-1} (norm, angle): {next_step}")
                         state = await mc.fsm(next_step, v, error_pos, state)
 
                     elif state != State.GOAL_REACHED: # try to reach again the goal

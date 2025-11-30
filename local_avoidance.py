@@ -1,7 +1,7 @@
 import numpy as np
 
 PROX_THR_HI = 2000
-PROX_THR_LO = 10
+PROX_THR_LO = 1500
 
 def test_obstacle_detected(prox):
     global PROX_THR_HI
@@ -25,7 +25,7 @@ async def avoid_obstacle(mc):
 
     while not no_obstacle:
         prox = list(mc.node["prox.horizontal"])
-
+        print(prox)
         x[5] = y[0] // 10
         x[6] = y[1] // 10
         x = np.array(prox) // 100
@@ -36,10 +36,8 @@ async def avoid_obstacle(mc):
         if test_no_obstacle(prox):
             no_obstacle = True
 
-        await mc.client.sleep(0.1)
-
     await mc.node.set_variables(mc.motors(100, 100))
-    await mc.client.sleep(2)
+    await mc.client.sleep(4)
     await mc.node.set_variables(mc.motors(0, 0))
     print("End local avoidance")
 
