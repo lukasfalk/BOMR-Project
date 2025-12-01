@@ -17,9 +17,18 @@ from motion_control import *
 # import filtering
 # import local_avoidance
 
+from enum import Enum
+
 v = Vision()
 
-from enum import Enum  
+## Noise
+var_v_left = 2.853437746116455
+var_v_right = 5.5411623536575645
+Q = np.diag([var_v_left**2, var_v_right**2, 10]) # Process noise covariance
+R = np.diag([0.05**2, 0.05**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
+
+pos_est = np.zeros(3)
+pos_pred = np.zeros(3)
 
 class State(Enum):
     GRID_CREATION = 0
@@ -118,10 +127,12 @@ def displacement_angle_to_origin_angle(path):
         abs_path.append((norm, normalized))
     return abs_path
 
-def update_filtering(left_speed, rignt_speed):
+def update_filtering(mc):
+    global pos_est, P_est, pos_pred, cm_per_pixel_fallback, cm_per_pixel_global
     frame = v.get_image(v._Vision__cap, False)
     frame = v.get_image(v._Vision__cap, False)
     pos_px = v.get_thymio_pos(frame)
+    pos_vision = None
     if pos_px[0] != None and pos_px[1] != None and pos_px[2] != None:              
         x_px, y_px, _ = pos_px
 
@@ -135,7 +146,10 @@ def update_filtering(left_speed, rignt_speed):
         y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
         pos_vision = (x_cm_robot, y_cm_robot)
 
-    pos_est, P_est, pos_pred = extended_kalman_filter(pos_est, P_est, left_speed, rignt_speed, pos_vision)
+    l = mc.node["motor.left.speed"]
+    r = mc.node["motor.right.speed"]
+
+    pos_est, P_est, pos_pred = extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
 
 #TODO:
 # passer le tableau de vecteur de déplacement en (x,y)_k (soit garder le bordel dans le main pour l'instant soit faire une vraie fonction)
@@ -144,13 +158,12 @@ def update_filtering(left_speed, rignt_speed):
 # -> faire un step_count bien fait dans le main
 async def main():
     global v
-    mc = await Motion_control.create()
     # threshold (cm) to consider the final goal reached
     GOAL_EPS_CM = 2.0
     SKIP_STEPS =  3
 
     try:
-
+        mc = await Motion_control.create()
         #gnav = global_nav.GlobalNavigation()
         #path, explored, operation_count = gnav.grid_search()
         #gnav.display_grid_with_path(path)
@@ -174,15 +187,7 @@ async def main():
         just_changed_state = True  
         state = State.GRID_CREATION
 
-        # ## Noise
-        # var_v_left = left_speed_ms.std()
-        # var_v_right = right_speed_ms.std()
-        # Q = np.diag([var_v_left**2, var_v_right**2, 10]) # Process noise covariance
-        # R = np.diag([0.05**2, 0.05**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
-
-        # pos_est = np.zeros(3)
-        # pos_pred = np.zeros(3)
-        # update_filtering(0, 0)
+        update_filtering(mc)
 
         vector_path_inversed = []
         while(1):

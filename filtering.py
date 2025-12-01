@@ -8,22 +8,13 @@ from typing import Tuple
 Ts = 0.01  # Sample time
 interwheel_distance = 0.11 # [m] Distance between the wheels
 
-td = np.array(thymio_data)
-# get the left_speed and right_speed values
-thymio_speed_to_ms = 0.3846153846153846 / 1000 # m/s conversion factor
-left_speed_data = np.array([i['left_speed'] for i in td])
-right_speed_data = np.array([i['right_speed'] for i in td])
-
-left_speed_ms = left_speed_data * thymio_speed_to_ms
-right_speed_ms = right_speed_data * thymio_speed_to_ms
+# Q = np.diag([10, 10, 10])  # Process noise covariance
 
 ## Noise
-var_v_left = left_speed_ms.std()
-var_v_right = right_speed_ms.std()
+var_v_left = 2.853437746116455
+var_v_right = 5.5411623536575645
 Q = np.diag([var_v_left**2, var_v_right**2, 10]) # Process noise covariance
 R = np.diag([0.05**2, 0.05**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
-
-# Q = np.diag([10, 10, 10])  # Process noise covariance
 
 x_est = np.zeros(3)
 P_est = np.diag([1e-3, 1e-3, 1e-3])  # Initial estimation covariance
@@ -111,31 +102,31 @@ def extended_kalman_filter(x_est: np.ndarray, P_est: np.ndarray,
         P_est = P_pred
     return x_est, P_est, x_pred
 
-pos_odo = []
-pos_filt = []
-vision_data = []
+# pos_odo = []
+# pos_filt = []
+# vision_data = []
 
-k0 = 0
-N = len(left_speed_ms)
-vision_data = [None]*N# np.zeros((N, 3))
-for k in range(k0, N):
-    left_speed  = left_speed_ms[k] # <- Measure current left speed
-    right_speed = right_speed_ms[k] # <- Measure current right speed
-    z = vision_data[k]
+# k0 = 0
+# N = len(left_speed_ms)
+# vision_data = [None]*N# np.zeros((N, 3))
+# for k in range(k0, N):
+#     left_speed  = left_speed_ms[k] # <- Measure current left speed
+#     right_speed = right_speed_ms[k] # <- Measure current right speed
+#     z = vision_data[k]
 
-    x_est, P_est, x_pred = extended_kalman_filter(x_est, P_est, left_speed, right_speed, z)
+#     x_est, P_est, x_pred = extended_kalman_filter(x_est, P_est, left_speed, right_speed, z)
 
-    pos_odo.append(x_pred.copy()) # raw odometry
-    pos_filt.append(x_est.copy()) # EKF estimate
+#     pos_odo.append(x_pred.copy()) # raw odometry
+#     pos_filt.append(x_est.copy()) # EKF estimate
 
-# -------------------- plotting --------------------
-poses_odom = np.array(pos_odo)
-poses_filt  = np.array(pos_filt)
-plt.figure(figsize=(7,7))
-plt.plot(poses_odom[:,0], poses_odom[:,1], 'b-', linewidth=0.8, label='Odometry')
-plt.plot(poses_filt[:,0], poses_filt[:,1], 'r--', linewidth=1.0, label='EKF')
-plt.scatter(poses_odom[0,0], poses_odom[0,1], c='b', s=50, label='Start')
-plt.scatter(poses_odom[-1,0], poses_odom[-1,1], c='g', s=50, label='End')
-plt.xlabel('x [m]'); plt.ylabel('y [m]'); plt.axis('equal'); plt.grid(True); plt.legend()
-plt.title('Odometry vs EKF (2D pose)')
-plt.show()
+# # -------------------- plotting --------------------
+# poses_odom = np.array(pos_odo)
+# poses_filt  = np.array(pos_filt)
+# plt.figure(figsize=(7,7))
+# plt.plot(poses_odom[:,0], poses_odom[:,1], 'b-', linewidth=0.8, label='Odometry')
+# plt.plot(poses_filt[:,0], poses_filt[:,1], 'r--', linewidth=1.0, label='EKF')
+# plt.scatter(poses_odom[0,0], poses_odom[0,1], c='b', s=50, label='Start')
+# plt.scatter(poses_odom[-1,0], poses_odom[-1,1], c='g', s=50, label='End')
+# plt.xlabel('x [m]'); plt.ylabel('y [m]'); plt.axis('equal'); plt.grid(True); plt.legend()
+# plt.title('Odometry vs EKF (2D pose)')
+# plt.show()

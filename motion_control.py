@@ -3,6 +3,7 @@ import numpy as np
 from tdmclient import ClientAsync
 
 from local_avoidance import *
+from main import update_filtering
 
 FORWARD_SPEED = 100
 GAIN_ANGLE = 60
@@ -39,7 +40,7 @@ class Motion_control:
             pass
 
     def motors(self, l, r):
-        
+        update_filtering(self)
         return {"motor.left.target": [int(l)], "motor.right.target": [int(r)]}
 
     def update_state(self):
