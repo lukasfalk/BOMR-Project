@@ -126,8 +126,8 @@ def update_filtering(mc, ekf):
     frame = v.get_image(v._Vision__cap, False)
     frame = v.get_image(v._Vision__cap, False)
     pos_vision = (None, None)
-    pos_x, pos_y , _ = v.get_thymio_pos_in_cm(frame)
-    pos_vision = (pos_x, pos_y)
+    pos_vision = v.get_thymio_pos_in_cm(frame)
+
     l = mc.node["motor.left.speed"]
     r = mc.node["motor.right.speed"]
 
@@ -263,9 +263,11 @@ async def main():
                 #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
                 #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
 
-                    if abs(np.subtract(pos_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
-                            print(f"Robot at {pos_est} and goal is {pos_to_goal[-1]}")
-                            state = State.GOAL_REACHED
+                pos_robot_est = pos_est[0], pos_est[1]
+
+                if abs(np.subtract(pos_robot_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_robot_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
+                    print(f"Robot at {pos_robot_est} and goal is {pos_to_goal[-1]}")
+                    state = State.GOAL_REACHED
                     
                     if step_count < len(pos_to_goal):
 
@@ -274,14 +276,14 @@ async def main():
                             state = State.GLOBAL_NAVIGATION
 
                         elif target_pos is not None:
-                            error_pos = np.linalg.norm(target_pos) - np.linalg.norm(pos_est)
+                            error_pos = np.linalg.norm(target_pos) - np.linalg.norm(pos_robot_est)
                         print(f"Error pos = {error_pos} \n")
 
                         target_pos = pos_to_goal[step_count]
 
                         # If robot closer to goal than next step => go one step further
                         #print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist target-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
-                        while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
+                        while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_robot_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
                             if step_count + 1 >= len(pos_to_goal):
                                 print("overflow pos_to_goal")
                                 break
@@ -290,14 +292,14 @@ async def main():
                                 target_pos = pos_to_goal[step_count]
                                 print(f"Skip step {step_count - 1}")
 
-                        dx = target_pos[0] - pos_est[0]
-                        dy = target_pos[1] - pos_est[1]
+                        dx = target_pos[0] - pos_robot_est[0]
+                        dy = target_pos[1] - pos_robot_est[1]
                         norm = np.linalg.norm([dx, dy])
                         angle = -np.atan2(dy, dx)
                         next_step = (norm, angle)
                         step_count += 1
 
-                        print(f"Robot at {pos_est} and going to {target_pos}")
+                        print(f"Robot at {pos_robot_est} and going to {target_pos}")
                         print(f"Step {step_count-1} (norm, angle): {next_step}")
                         state = await mc.fsm(next_step, v, error_pos, state)
 
