@@ -153,7 +153,7 @@ async def main():
         step_count = 0
         current_path = None  # Will be filled with displacement vectors
         
-        just_changed_state = True  
+        just_changed_state = False  
         state = State.GRID_CREATION
         vector_path_inversed = []
 
@@ -204,6 +204,7 @@ async def main():
 
                 step_count = 0
 
+                vector_path_inversed = [] #in case of kidnapping we do not want the paths to adds up
                 for idx in range(len(vector_path)):
                     norm, angle = vector_path[idx]
                     vector_path_inversed.append((norm,-1*angle))  #invert angle to have the right orientation (vision has y inverted compared to robot frame)

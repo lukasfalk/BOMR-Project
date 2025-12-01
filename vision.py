@@ -48,6 +48,44 @@ class Vision:
 
         if not self.__cap.isOpened():
             raise Exception("Unable to open the camera")
+        
+    def re_initialize_camera(self):
+        #release and re-open the camera
+        self.__cap.release()
+
+
+        #Variables for gnav/outside the class
+        self.grid = None 
+        self.thymio_pos = None
+        self.cell_size = None 
+        self.goal = None
+        self._aruco_real_size_cm = 5  #Known ArUco physical size
+        self.__cm_per_pixel_after = None
+        self.__cm_per_pixel_before = None
+
+        #variables mainly for the class
+        self.wall_dilation = 0 #0 by default -> used in get_grid()
+
+        # Open camera (0 = first camera USB detected)
+        self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
+        self.__goal_end = np.zeros((2,2)) #1 pt -> (x,y) -> NOT (y,x) (line first and column then)
+
+        #variables used to crop the image
+        self._M, self._w, self._h = None, None, None
+
+        #Take the calibration data if it exists
+        try:
+            calib = np.load('camera_calibration.npz')
+            self.__camera_matrix = calib['camera_matrix']
+            self.__dist_coeffs = calib['dist_coeffs']
+            print("Calibration chargée avec succès")
+        except:
+            print("ATTENTION: Pas de calibration trouvée, distortion non corrigée!")
+            self.__camera_matrix = None
+            self.__dist_coeffs = None
+
+        if not self.__cap.isOpened():
+            raise Exception("Unable to open the camera")
 
     def __del__(self):
         #Release the camera
@@ -230,6 +268,61 @@ class Vision:
         #id 0 is top left and id 2 is bottom right
         #Detection of the "box" + calculation of the cell size
         
+        # AUTO-CORRECTION DE L'ORIENTATION DE L'IMAGE
+        # Vérifier si l'image est tournée en examinant la position relative des ArUco 0 et 2
+        aruco_0_center = None
+        aruco_2_center = None
+        
+        if ids is not None:
+            for c, i in zip(corners, ids):
+                center = c[0].mean(axis=0)
+                if i[0] == 0:
+                    aruco_0_center = center
+                elif i[0] == 2:
+                    aruco_2_center = center
+        
+        # Si les deux ArUco sont détectés, vérifier l'orientation
+        if aruco_0_center is not None and aruco_2_center is not None:
+            # ArUco 0 doit être en haut à gauche, ArUco 2 en bas à droite
+            # Si ArUco 0 est à droite de ArUco 2, l'image est tournée de 90° dans le sens horaire
+            # Si ArUco 0 est en bas de ArUco 2, l'image est tournée de 180°
+            # Si ArUco 0 est à gauche de ArUco 2 mais en dessous, l'image est tournée de 270° (ou -90°)
+            
+            dx = aruco_2_center[0] - aruco_0_center[0]
+            dy = aruco_2_center[1] - aruco_0_center[1]
+            
+            rotation_needed = None
+            
+            # Déterminer l'orientation basée sur la position relative
+            if abs(dx) > abs(dy):
+                # Orientation horizontale dominante
+                if dx < 0:
+                    # ArUco 2 est à gauche de ArUco 0 -> rotation 180°
+                    rotation_needed = cv2.ROTATE_180
+                    print("Image tournée de 180° détectée - correction appliquée")
+            else:
+                # Orientation verticale dominante
+                if dy < 0:
+                    # ArUco 2 est au-dessus de ArUco 0 -> rotation 180°
+                    rotation_needed = cv2.ROTATE_180
+                    print("Image tournée de 180° détectée - correction appliquée")
+                elif dx < 0:
+                    # ArUco 2 est en haut à gauche de ArUco 0 -> rotation 90° sens anti-horaire
+                    rotation_needed = cv2.ROTATE_90_COUNTERCLOCKWISE
+                    print("Image tournée de 90° (sens anti-horaire) détectée - correction appliquée")
+                elif dx > 0 and dy < abs(dx):
+                    # ArUco 2 est en bas à gauche de ArUco 0 -> rotation 90° sens horaire
+                    rotation_needed = cv2.ROTATE_90_CLOCKWISE
+                    print("Image tournée de 90° (sens horaire) détectée - correction appliquée")
+            
+            # Appliquer la rotation si nécessaire
+            if rotation_needed is not None:
+                frame = cv2.rotate(frame, rotation_needed)
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                # Re-détecter les markers après rotation
+                corners, ids, rejected = detector.detectMarkers(gray)
+                print("Markers après correction:", ids)
+        
         aruco_pixel_sizes = []
 
         centers_2pts=np.zeros((2,2))
@@ -247,21 +340,6 @@ class Vision:
             if i in [0, 2]:
                 center = c[0].mean(axis=0)
                 centers_2pts[id_to_idx[int(i)]] = center
-            '''
-            elif i in [1,3]:#replace the two arucos which are inside by white squares (to avoid confusion during the grid creation)
-                center = c[0].mean(axis=0)
-
-                expanded_pts = []
-                for pt in pts:#radially expand it
-                    vec = pt - center
-                    length = np.linalg.norm(vec)
-                    if length > 0:
-                        new_pt = center + vec * (1 + aruco_margin_factor)
-                        expanded_pts.append(new_pt)
-
-                expanded_pts = np.array(expanded_pts, dtype=np.int32)
-                cv2.fillPoly(frame, [expanded_pts], (255, 255, 255))
-                '''
 
         # Average pixel size of all detected ArUcos
         aruco_pixel_size_before = np.mean(aruco_pixel_sizes)
