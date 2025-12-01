@@ -121,7 +121,7 @@ def displacement_angle_to_origin_angle(path):
         abs_path.append((norm, normalized))
     return abs_path
 
-def update_filtering(mc):
+def update_filtering(mc, ekf):
     global pos_est, P_est, pos_pred, cm_per_pixel_fallback, cm_per_pixel_global
     frame = v.get_image(v._Vision__cap, False)
     frame = v.get_image(v._Vision__cap, False)
@@ -181,7 +181,7 @@ async def main():
         just_changed_state = True  
         state = State.GRID_CREATION
 
-        ekf.update_filtering(mc)
+        update_filtering(mc, ekf)
 
         vector_path_inversed = []
         while(1):

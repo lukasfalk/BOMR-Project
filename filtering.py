@@ -69,7 +69,7 @@ class Filtering :
         self.x_est = self.x_pred + K @ inno
         self.P_est = (np.eye(3) - K @ H) @ self.P_pred
 
-    def extended_kalman_filter(self, left_speed: float, right_speed: float,
+    def extended_kalman_filter(self,pos_est, P_prev, left_speed: float, right_speed: float,
                                z: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         '''
             Perform one iteration of the Extended Kalman Filter.
@@ -77,8 +77,8 @@ class Filtering :
             the current left and right wheel speeds,
             and returns the updated state estimate and covariance.
         '''
-        x_prev = self.x_est.copy()
-        P_prev = self.P_est.copy()
+        x_prev = pos_est
+        P_prev = P_prev
 
         
         self.v     = (left_speed  + right_speed) / 2 # Average speed
