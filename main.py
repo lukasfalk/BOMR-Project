@@ -22,7 +22,7 @@ from enum import Enum
 v = Vision()
 
 pos_est = np.zeros(3)
-pos_pred = np.zeros(3)
+P_est = np.diag([1e-3, 1e-3, 1e-3])
 
 class State(Enum):
     GRID_CREATION = 0
@@ -122,23 +122,12 @@ def displacement_angle_to_origin_angle(path):
     return abs_path
 
 def update_filtering(mc, ekf):
-    global pos_est, P_est, pos_pred, cm_per_pixel_fallback, cm_per_pixel_global
+    global v, pos_est, P_est, pos_pred
     frame = v.get_image(v._Vision__cap, False)
     frame = v.get_image(v._Vision__cap, False)
-    pos_px = v.get_thymio_pos(frame)
-    pos_vision = None
-    if pos_px[0] != None and pos_px[1] != None and pos_px[2] != None:              
-        x_px, y_px, _ = pos_px
-
-        # ensure we have scale (pixels per cm); try to recover if missing
-        if cm_per_pixel_global is None:
-            _, _, cm_per_pixel_global, _ = v.get_start_pos_and_cm_per_pixel(frame)
-
-        # convert pixel coords to cm and to bottom-left origin
-        x_cm_robot = x_px / cm_per_pixel_global
-        y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
-        pos_vision = (x_cm_robot, y_cm_robot)
-
+    pos_vision = (None, None)
+    pos_x, pos_y , _ = v.get_thymio_pos_in_cm(frame)
+    pos_vision = (pos_x, pos_y)
     l = mc.node["motor.left.speed"]
     r = mc.node["motor.right.speed"]
 
@@ -156,7 +145,6 @@ async def main():
     SKIP_STEPS =  3
 
     try:
-        mc = await Motion_control.create()
         #gnav = global_nav.GlobalNavigation()
         #path, explored, operation_count = gnav.grid_search()
         #gnav.display_grid_with_path(path)
@@ -172,7 +160,8 @@ async def main():
         current_path = None  # Vector of displacement vectors at each step
         current_image = None
         cm_per_pixel_global = None
-        
+    
+        mc = await Motion_control.create()
         gnav = GlobalNavigation()
         ekf = Filtering()
         step_count = 0
@@ -180,8 +169,6 @@ async def main():
         
         just_changed_state = True  
         state = State.GRID_CREATION
-
-        update_filtering(mc, ekf)
 
         vector_path_inversed = []
         while(1):
@@ -200,6 +187,9 @@ async def main():
                 v.plot_grid()
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
+
+                update_filtering(mc, ekf)
+
                 #gnav.display_grid_with_path(current_path)
                 #gnav.display_colored_grid()
                 print("A* path length =", len(current_path)-1, "\n", current_path)

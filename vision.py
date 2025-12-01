@@ -296,6 +296,7 @@ class Vision:
 
         # Conversion ratio
         self.__cm_per_pixel_before = 5.0/aruco_pixel_size_before
+        print("CONVERTIONNED")
 
         top_right = [centers_2pts[0][0],centers_2pts[1][1]]
         bottom_left = [centers_2pts[1][0],centers_2pts[0][1]]

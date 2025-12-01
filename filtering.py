@@ -29,7 +29,7 @@ class Filtering :
         self.P_prev = None
         self.omega = None 
 
-    def wrap_angle(theta: float) -> float:
+    def wrap_angle(self, theta: float) -> float:
         return (theta + np.pi) % (2*np.pi) - np.pi
 
     def state_transition_jacobian(self):
