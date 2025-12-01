@@ -35,6 +35,17 @@ class Vision:
         #variables used to crop the image
         self._M, self._w, self._h = None, None, None
 
+        #Take the calibration data if it exists
+        try:
+            calib = np.load('camera_calibration.npz')
+            self.__camera_matrix = calib['camera_matrix']
+            self.__dist_coeffs = calib['dist_coeffs']
+            print("Calibration chargée avec succès")
+        except:
+            print("ATTENTION: Pas de calibration trouvée, distortion non corrigée!")
+            self.__camera_matrix = None
+            self.__dist_coeffs = None
+
         if not self.__cap.isOpened():
             raise Exception("Unable to open the camera")
 
@@ -54,6 +65,12 @@ class Vision:
 
         # Read one frame
         ret, frame = cap.read()
+
+        '''
+        # Corriger la distortion si calibration disponible
+        if self.__camera_matrix is not None:
+            frame = cv2.undistort(frame, self.__camera_matrix, self.__dist_coeffs)
+            '''
 
         if not ret:
             raise Exception("Unable to capture the image")
@@ -145,7 +162,7 @@ class Vision:
     General function
     Take a picture, cut it inside the Arucos and do the grid (0 -> road, 1 -> walls, 2 -> start, 3 -> goal)
     '''
-    def vision(self,acquisition_delay,white_threshold,plot):
+    def vision(self,acquisition_delay,white_threshold,plot,P):
         #Camera auto-tune
         for idx in range(acquisition_delay):
             _,_ = self.__cap.read()
@@ -161,7 +178,7 @@ class Vision:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        self.grid = self.get_grid(20,30,frame_cropped,white_threshold)#the last threshold parameter can be used to tune it (in function of the workplace)
+        self.grid = self.get_grid(50,30,frame_cropped,white_threshold,P)#the threshold parameter can be used to tune it (in function of the workplace)
 
         grid_Ny, grid_Nx = self.grid.shape
         height, width = frame_cropped.shape[:2]
@@ -294,6 +311,8 @@ class Vision:
                 pts = c[0]
                 pixel_width = np.linalg.norm(pts[0] - pts[1])
                 pixel_height = np.linalg.norm(pts[1] - pts[2])
+                #to test if distortion
+                print(f"ArUco {i[0]}: largeur={pixel_width:.1f}px, hauteur={pixel_height:.1f}px")
                 aruco_pixel_sizes_after.append((pixel_width + pixel_height) / 2)
 
         aruco_pixel_size_after = np.mean(aruco_pixel_sizes_after) if len(aruco_pixel_sizes_after) > 0 else 0.0
@@ -304,7 +323,7 @@ class Vision:
             # Fallback to before if after-detection failed
             self.__cm_per_pixel_after = self.__cm_per_pixel_before
 
-        aruco_margin_factor = 1
+        aruco_margin_factor = 2.5
         for c, i in zip(corners_after, ids_after):
             if i in [1, 3]:
                 pts = c[0]
@@ -449,15 +468,22 @@ class Vision:
     zero means black -> wall
     one means white -> road
     Advice: do not use the default case with 0,0 because the A* will be very long to compute
+
+    P: it creates a square grid with cell size P (in pixels)
     '''
-    def get_grid(self,grid_Nx,grid_Ny,frame,white_th):
+    def get_grid(self,grid_Nx,grid_Ny,frame,white_th,P):
         height, width, _ = frame.shape
 
         #Default case
-        if grid_Nx == 0 or grid_Ny == 0:
-            print("Default case in grid creation")
-            grid_Nx = width
-            grid_Ny = height
+        if grid_Nx == 0 or grid_Ny == 0 or P > 0:
+            if P > 0:
+                print("square case in grid creation")
+                grid_Nx = int(width  / P)
+                grid_Ny = int(height / P)
+            else:
+                print("Default case in grid creation")
+                grid_Nx = width
+                grid_Ny = height
 
         #Compute cell size using floating point division to avoid truncation
         cell_h_f = max(float(height) / float(grid_Ny), 1.0)

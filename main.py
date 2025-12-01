@@ -156,6 +156,8 @@ async def main():
         just_changed_state = True  
         state = State.GRID_CREATION
         vector_path_inversed = []
+
+        v.cam_centering()
         while(1):
             if state == State.KIDNAPPING:
                 print("Kidnapped during path following")
@@ -167,8 +169,7 @@ async def main():
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
-                v.cam_centering()
-                v.vision(5,50,False)
+                v.vision(5,80,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
                 v.plot_grid()
 
                 # si v est une instance de Vision et que v.vision(...) a été appelé
@@ -176,8 +177,8 @@ async def main():
 
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
-                #gnav.display_grid_with_path(current_path)
-                #gnav.display_colored_grid()
+                gnav.display_grid_with_path(current_path)
+                gnav.display_colored_grid()
                 print("A* path length =", len(current_path)-1, "\n", current_path)
 
                 # gnav -> find the array of vectors (deplacement at step k)
