@@ -168,8 +168,12 @@ async def main():
             if state == State.GRID_CREATION:
                 print("Grid Creation")
                 v.cam_centering()
-                v.vision(5,90,False)
+                v.vision(5,50,False)
                 v.plot_grid()
+
+                # si v est une instance de Vision et que v.vision(...) a été appelé
+                v.overlay_grid_on_cropped()          # ouvre une fenêtre avec la superposition
+
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
                 #gnav.display_grid_with_path(current_path)
@@ -192,13 +196,14 @@ async def main():
 
                 if vector_path is not None:
                     #current_image = v.get_image(v._Vision__cap, False)
-                    current_image = v.get_cutted_frame(True,True)
+                    current_image = v.get_cutted_frame(False,False)
                     print("image size:", current_image.shape)
                 
                 if current_image is not None:
                     # Plot the image with the paths (displacement vectors)
                     # Get start position (cm), scale (pixels/cm) and start orientation (radians)
                     x_cm, y_cm, cm_per_pixel, start_orientation = v.get_start_pos_and_cm_per_pixel(current_image)
+                    print(f"Start pos (cm): x={x_cm}, y={y_cm}, cm_per_pixel={cm_per_pixel}, start_orientation (rad)={start_orientation}")
 
                     if cm_per_pixel is None:
                         print("Scale unavailable: skipping path plotting")
