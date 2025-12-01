@@ -183,7 +183,7 @@ async def main():
             if state == State.GRID_CREATION:
                 print("Grid Creation")
                 v.cam_centering()
-                v.vision(5,90,False)
+                v.vision(5,90,False,10)
                 v.plot_grid()
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
@@ -256,7 +256,7 @@ async def main():
 
                 target_pos = None
                 error_pos = 0
-
+                
             elif state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
                 #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
                 #pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
@@ -305,6 +305,8 @@ async def main():
 
                     elif state != State.GOAL_REACHED: # try to reach again the goal
                         step_count -= 1
+
+
 
             if state == State.GOAL_REACHED:
                 print(f"Goal reached")
