@@ -31,6 +31,9 @@ class Vision:
         self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
         self.__goal_end = np.zeros((2,2)) #1 pt -> (x,y) -> NOT (y,x) (line first and column then)
 
+        #variables used to crop the image
+        self._M, self._w, self._h = None, None, None
+
         if not self.__cap.isOpened():
             raise Exception("Unable to open the camera")
 
@@ -260,7 +263,8 @@ class Vision:
 
         centers_2pts=np.zeros((2,2))
         id_to_idx = {0: 0, 2: 1} #since i can go to n (n being number of arucos)
-        aruco_margin_factor = 0.1 #how much size of the Aruco do we want to add ?
+        #aruco_margin_factor = 0.1 #how much size of the Aruco do we want to add ?
+        aruco_margin_factor = 1 #how much size of the Aruco do we want to add ?
         for c, i in zip(corners, ids):
             pts = c[0]  # shape (4,2)
 
@@ -376,19 +380,37 @@ class Vision:
         box = box.astype(np.float32) 
 
         #Calculate actual distances between corners to preserve aspect ratio
-        w = int(np.round(np.linalg.norm(box[1] - box[0])))
-        h = int(np.round(np.linalg.norm(box[2] - box[1])))
+        self._w = int(np.round(np.linalg.norm(box[1] - box[0])))
+        self._h = int(np.round(np.linalg.norm(box[2] - box[1])))
 
-        if w == 0 or h == 0:
+        if self._w == 0 or self._h == 0:
             print("Invalid rectangle dimensions for cropping.")
             return None
 
-        dst_pts = np.array([[0,0],[w,0],[w,h],[0,h]], dtype="float32")
-        M = cv2.getPerspectiveTransform(box.astype("float32"), dst_pts)
+        dst_pts = np.array([[0,0],[self._w,0],[self._w,self._h],[0,self._h]], dtype="float32")
+        self._M = cv2.getPerspectiveTransform(box.astype("float32"), dst_pts)
         #Apply borderMode to reduce distortion at the edges
-        cropped_frame = cv2.warpPerspective(frame, M, (w, h), borderMode=cv2.BORDER_REFLECT)
-        return cropped_frame,M
+        cropped_frame = cv2.warpPerspective(frame, self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
+        return cropped_frame,self._M
 
+    '''
+    Get a cropped frame from the arucos. Either recalculate the cropping parameters or use the previous ones
+    '''
+    def get_cutted_frame(self,plot,resample_each_time=False):
+        if self._M is None or self._w is None or self._h is None or resample_each_time:
+            # First time setup
+            if plot:
+                print("Setting up cropping parameters...")
+            frame = self.get_image(self.__cap,plot)
+            cropped_frame,_ = self.get_frame_from_aruco(frame)
+        else:
+            cropped_frame = cv2.warpPerspective(self.get_image(self.__cap,plot), self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
+
+        if plot:
+            cv2.imshow("Cropped frame from get_cutted_frame", cropped_frame)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        return cropped_frame
 
     '''
     Create and send the grid (i.e. before pathfinding)

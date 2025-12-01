@@ -191,7 +191,8 @@ async def main():
                     vector_path_inversed.append((norm,-1*angle))  #invert angle to have the right orientation (vision has y inverted compared to robot frame)
 
                 if vector_path is not None:
-                    current_image = v.get_image(v._Vision__cap, False)
+                    #current_image = v.get_image(v._Vision__cap, False)
+                    current_image = v.get_cutted_frame(True,True)
                     print("image size:", current_image.shape)
                 
                 if current_image is not None:
@@ -246,7 +247,8 @@ async def main():
                 
                 # get current image and thymio position in pixels
                 frame = v.get_image(v._Vision__cap, False) # first call to empty the cache
-                frame = v.get_image(v._Vision__cap, False) # second call to get the right image
+                #frame = v.get_image(v._Vision__cap, False) # second call to get the right image
+                frame = v.get_cutted_frame(False)
                 pos_px = v.get_thymio_pos(frame)
                 if pos_px[0] != None and pos_px[1] != None and pos_px[2] != None:              
                     x_px, y_px, robot_angle = pos_px
