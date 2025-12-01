@@ -11,7 +11,7 @@ from tdmclient import ClientAsync
 
 from vision import Vision
 from global_nav import GlobalNavigation #from global_nav import GlobalNavigation
-from filtering import *
+from filtering import Filtering
 from motion_control import *
 # import motion_control
 # import filtering
@@ -20,12 +20,6 @@ from motion_control import *
 from enum import Enum
 
 v = Vision()
-
-## Noise
-var_v_left = 2.853437746116455
-var_v_right = 5.5411623536575645
-Q = np.diag([var_v_left**2, var_v_right**2, 10]) # Process noise covariance
-R = np.diag([0.05**2, 0.05**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
 
 pos_est = np.zeros(3)
 pos_pred = np.zeros(3)
@@ -138,8 +132,7 @@ def update_filtering(mc):
 
         # ensure we have scale (pixels per cm); try to recover if missing
         if cm_per_pixel_global is None:
-            _, _, cm_per_pixel_fallback, _ = v.get_start_pos_and_cm_per_pixel(frame)
-            cm_per_pixel_global = cm_per_pixel_fallback
+            _, _, cm_per_pixel_global, _ = v.get_start_pos_and_cm_per_pixel(frame)
 
         # convert pixel coords to cm and to bottom-left origin
         x_cm_robot = x_px / cm_per_pixel_global
@@ -149,7 +142,7 @@ def update_filtering(mc):
     l = mc.node["motor.left.speed"]
     r = mc.node["motor.right.speed"]
 
-    pos_est, P_est, pos_pred = extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
+    pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
 
 #TODO:
 # passer le tableau de vecteur de déplacement en (x,y)_k (soit garder le bordel dans le main pour l'instant soit faire une vraie fonction)
@@ -181,13 +174,14 @@ async def main():
         cm_per_pixel_global = None
         
         gnav = GlobalNavigation()
+        ekf = Filtering()
         step_count = 0
         current_path = None  # Will be filled with displacement vectors
         
         just_changed_state = True  
         state = State.GRID_CREATION
 
-        update_filtering(mc)
+        ekf.update_filtering(mc)
 
         vector_path_inversed = []
         while(1):
