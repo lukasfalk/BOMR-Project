@@ -569,6 +569,17 @@ class Vision:
 
         return x, y, angle
     
+    def get_thymio_pos_in_cm(self, frame):
+        x_px, y_px, theta = self.get_thymio_pos(frame)
+        if x_px is None or y_px is None:
+            return None, None, None
+
+        # Convert pixel position to cm using the scale after cropping
+        x_cm = x_px * self.__cm_per_pixel_after
+        y_cm = y_px * self.__cm_per_pixel_after
+
+        return x_cm, y_cm, theta
+    
     def get_start_pos_and_cm_per_pixel(self, frame, aruco_real_size_cm=5.3):
         """
         Detecte l'ArUco d'id 1 (start) dans l'image fournie et renvoie la position
