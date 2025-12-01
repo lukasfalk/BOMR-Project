@@ -27,8 +27,6 @@ class Filtering :
         self.P_est = np.diag([1e-3, 1e-3, 1e-3])  # Initial estimation covariance
         self.P_pred = None
         self.P_prev = None
-
-        self.x = None
         self.omega = None 
 
     def wrap_angle(theta: float) -> float:
@@ -36,25 +34,25 @@ class Filtering :
 
     def state_transition_jacobian(self):
         ''' Compute the derived Jacobian of the state space model'''
-        return np.array([[1, 0, -self.v * np.sin(self.x[2]) * self.Ts],
-                         [0, 1,  self.v * np.cos(self.x[2]) * self.Ts],
+        return np.array([[1, 0, -self.v * np.sin(self.x_prev[2]) * self.Ts],
+                         [0, 1,  self.v * np.cos(self.x_prev[2]) * self.Ts],
                          [0, 0, 1]])
 
     def predict_state_est(self):
         ''' Predict the next state and covariance'''
 
-        #self.x[2] is theta the angle
+        #self.x_prev[2] is theta the angle
 
         if abs(self.omega) < 1e-9:
             self.x_pred = np.array([
-                        self.x[0] + self.v * np.cos(self.x[2]) * self.Ts,
-                        self.x[1] + self.v * np.sin(self.x[2]) * self.Ts,
-                        self.wrap_angle(self.x[2] + self.omega * self.Ts)])
+                        self.x_prev[0] + self.v * np.cos(self.x_prev[2]) * self.Ts,
+                        self.x_prev[1] + self.v * np.sin(self.x_prev[2]) * self.Ts,
+                        self.wrap_angle(self.x_prev[2] + self.omega * self.Ts)])
         else:
             self.x_pred = np.array([
-                        self.x[0] + (self.v / self.omega) * (np.sin(self.x[2] + self.omega * self.Ts) - np.sin(self.x[2])),
-                        self.x[1] + (self.v / self.omega) * (-np.cos(self.x[2] + self.omega * self.Ts) + np.cos(self.x[2])),
-                        self.wrap_angle(self.x[2] + self.omega * self.Ts)])
+                        self.x_prev[0] + (self.v / self.omega) * (np.sin(self.x_prev[2] + self.omega * self.Ts) - np.sin(self.x_prev[2])),
+                        self.x_prev[1] + (self.v / self.omega) * (-np.cos(self.x_prev[2] + self.omega * self.Ts) + np.cos(self.x_prev[2])),
+                        self.wrap_angle(self.x_prev[2] + self.omega * self.Ts)])
 
         F = self.state_transition_jacobian()
 
@@ -69,7 +67,8 @@ class Filtering :
         self.x_est = self.x_pred + K @ inno
         self.P_est = (np.eye(3) - K @ H) @ self.P_pred
 
-    def extended_kalman_filter(self,pos_est, P_prev, left_speed: float, right_speed: float,
+    def extended_kalman_filter(self, x_est: np.ndarray, P_est: np.ndarray, 
+                               left_speed: float, right_speed: float,
                                z: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         '''
             Perform one iteration of the Extended Kalman Filter.
@@ -77,8 +76,8 @@ class Filtering :
             the current left and right wheel speeds,
             and returns the updated state estimate and covariance.
         '''
-        x_prev = pos_est
-        P_prev = P_prev
+        self.x_prev = x_est
+        self.P_prev = P_est
 
         
         self.v     = (left_speed  + right_speed) / 2 # Average speed
@@ -89,7 +88,7 @@ class Filtering :
 
         # Update step
         if z is not None:
-            self.update_state_est(self, z)
+            self.update_state_est(z)
         else:
             # No measurement update. Estimated states are the predicted states
             self.x_est = self.x_pred
