@@ -11,7 +11,7 @@ from tdmclient import ClientAsync
 
 from vision import Vision
 from global_nav import GlobalNavigation #from global_nav import GlobalNavigation
-
+from filtering import *
 from motion_control import *
 # import motion_control
 # import filtering
@@ -118,6 +118,24 @@ def displacement_angle_to_origin_angle(path):
         abs_path.append((norm, normalized))
     return abs_path
 
+def update_filtering(left_speed, rignt_speed):
+    frame = v.get_image(v._Vision__cap, False)
+    frame = v.get_image(v._Vision__cap, False)
+    pos_px = v.get_thymio_pos(frame)
+    if pos_px[0] != None and pos_px[1] != None and pos_px[2] != None:              
+        x_px, y_px, _ = pos_px
+
+        # ensure we have scale (pixels per cm); try to recover if missing
+        if cm_per_pixel_global is None:
+            _, _, cm_per_pixel_fallback, _ = v.get_start_pos_and_cm_per_pixel(frame)
+            cm_per_pixel_global = cm_per_pixel_fallback
+
+        # convert pixel coords to cm and to bottom-left origin
+        x_cm_robot = x_px / cm_per_pixel_global
+        y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
+        pos_vision = (x_cm_robot, y_cm_robot)
+
+    pos_est, P_est, pos_pred = extended_kalman_filter(pos_est, P_est, left_speed, rignt_speed, pos_vision)
 
 #TODO:
 # passer le tableau de vecteur de déplacement en (x,y)_k (soit garder le bordel dans le main pour l'instant soit faire une vraie fonction)
@@ -155,6 +173,17 @@ async def main():
         
         just_changed_state = True  
         state = State.GRID_CREATION
+
+        # ## Noise
+        # var_v_left = left_speed_ms.std()
+        # var_v_right = right_speed_ms.std()
+        # Q = np.diag([var_v_left**2, var_v_right**2, 10]) # Process noise covariance
+        # R = np.diag([0.05**2, 0.05**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
+
+        # pos_est = np.zeros(3)
+        # pos_pred = np.zeros(3)
+        # update_filtering(0, 0)
+
         vector_path_inversed = []
         while(1):
             if state == State.KIDNAPPING:
@@ -244,28 +273,9 @@ async def main():
                 #pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
                 #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
                 #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
-                
-                # get current image and thymio position in pixels
-                frame = v.get_image(v._Vision__cap, False) # first call to empty the cache
-                #frame = v.get_image(v._Vision__cap, False) # second call to get the right image
-                frame = v.get_cutted_frame(False)
-                pos_px = v.get_thymio_pos(frame)
-                if pos_px[0] != None and pos_px[1] != None and pos_px[2] != None:              
-                    x_px, y_px, robot_angle = pos_px
 
-                    # ensure we have scale (pixels per cm); try to recover if missing
-                    if cm_per_pixel_global is None:
-                        _, _, cm_per_pixel_fallback, _ = v.get_start_pos_and_cm_per_pixel(frame)
-                        cm_per_pixel_global = cm_per_pixel_fallback
-
-                    # convert pixel coords to cm and to bottom-left origin
-                    x_cm_robot = x_px / cm_per_pixel_global
-                    y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
-                    robot_pos = (x_cm_robot, y_cm_robot)
-                    #print(f"rob pos = {robot_pos}")
-
-                    if abs(np.subtract(robot_pos, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(robot_pos, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
-                            print(f"Robot at {robot_pos} and goal is {pos_to_goal[-1]}")
+                    if abs(np.subtract(pos_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
+                            print(f"Robot at {pos_est} and goal is {pos_to_goal[-1]}")
                             state = State.GOAL_REACHED
                     
                     if step_count < len(pos_to_goal):
@@ -275,14 +285,14 @@ async def main():
                             state = State.GLOBAL_NAVIGATION
 
                         elif target_pos is not None:
-                            error_pos = np.linalg.norm(target_pos) - np.linalg.norm(robot_pos)
+                            error_pos = np.linalg.norm(target_pos) - np.linalg.norm(pos_est)
                         print(f"Error pos = {error_pos} \n")
 
                         target_pos = pos_to_goal[step_count]
 
                         # If robot closer to goal than next step => go one step further
                         #print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist target-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
-                        while np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
+                        while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
                             if step_count + 1 >= len(pos_to_goal):
                                 print("overflow pos_to_goal")
                                 break
@@ -291,14 +301,14 @@ async def main():
                                 target_pos = pos_to_goal[step_count]
                                 print(f"Skip step {step_count - 1}")
 
-                        dx = target_pos[0] - robot_pos[0]
-                        dy = target_pos[1] - robot_pos[1]
+                        dx = target_pos[0] - pos_est[0]
+                        dy = target_pos[1] - pos_est[1]
                         norm = np.linalg.norm([dx, dy])
                         angle = -np.atan2(dy, dx)
                         next_step = (norm, angle)
                         step_count += 1
 
-                        print(f"Robot at {robot_pos} and going to {target_pos}")
+                        print(f"Robot at {pos_est} and going to {target_pos}")
                         print(f"Step {step_count-1} (norm, angle): {next_step}")
                         state = await mc.fsm(next_step, v, error_pos, state)
 
