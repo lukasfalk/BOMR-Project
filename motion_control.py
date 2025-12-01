@@ -39,9 +39,12 @@ class Motion_control:
         except Exception:
             pass
 
-    def motors(self, l, r):
-        update_filtering(self)
+    def set_motors(self, l, r):
         return {"motor.left.target": [int(l)], "motor.right.target": [int(r)]}
+
+    def motors(self, l, r):
+        self.set_motors(l, r)
+        update_filtering(self)
 
     def update_state(self):
         prox_h = list(self.node["prox.horizontal"])
