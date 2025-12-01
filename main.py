@@ -160,12 +160,25 @@ async def main():
         v.cam_centering()
         while(1):
             if state == State.KIDNAPPING:
-                print("Kidnapped during path following")
-                robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
+                if just_changed_state:
+                    await mc.client.sleep(0.1)
+                    #empty the camera buffer
+                    for idx in range(50):
+                        _ = v.get_image(v._Vision__cap, False)
+                    just_changed_state = False
+                    print("Kidnapped during path following")
+                x,_,_ = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
+                robot_detected = (x != None)
                 if robot_detected:
                     print("Robot detected after kidnapping")
                     await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
+
+                    #empty the camera buffer
+                    for idx in range(50):
+                        _ = v.get_image(v._Vision__cap, False) 
+
                     state = State.GRID_CREATION
+                    just_changed_state = True
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
@@ -240,6 +253,7 @@ async def main():
                     y = prev_y + norm * np.sin(angle)  
                     pos_to_goal.append((x, y))
                 state = State.GLOBAL_NAVIGATION
+                just_changed_state = True
                 print(f"Pos to goal = {pos_to_goal}")
 
                 target_pos = None
@@ -271,14 +285,16 @@ async def main():
                     #print(f"rob pos = {robot_pos}")
 
                     if abs(np.subtract(robot_pos, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(robot_pos, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
-                            print(f"Robot at {robot_pos} and goal is {pos_to_goal[-1]}")
-                            state = State.GOAL_REACHED
+                        print(f"Robot at {robot_pos} and goal is {pos_to_goal[-1]}")
+                        state = State.GOAL_REACHED
+                        just_changed_state = True
                     
                     if step_count < len(pos_to_goal):
 
                         if state == State.OBS_AVOIDED:
                             step_count += SKIP_STEPS
                             state = State.GLOBAL_NAVIGATION
+                            just_changed_state = True
 
                         elif target_pos is not None:
                             error_pos = np.linalg.norm(target_pos) - np.linalg.norm(robot_pos)
@@ -310,6 +326,12 @@ async def main():
 
                     elif state != State.GOAL_REACHED: # try to reach again the goal
                         step_count -= 1
+                else:
+                    print("Kidnapped during path following (due to no robot detection)")
+                    state = State.KIDNAPPING
+                    #stop the motors
+                    await mc.node.set_variables(mc.motors(0, 0))
+                    just_changed_state = True
 
             if state == State.GOAL_REACHED:
                 print(f"Goal reached")
