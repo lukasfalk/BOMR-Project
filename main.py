@@ -308,6 +308,9 @@ async def main():
                 frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
+
+                #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
+                #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
                 if pos_robot_vision[0] is None:#if kidnapped and it hides the aruco marker
                     print("Kidnapped during path following (due to no robot detection)")
                     state = State.KIDNAPPING
