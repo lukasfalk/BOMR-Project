@@ -528,22 +528,6 @@ class Vision:
         print(f"Ratio after/before: {self.__cm_per_pixel_after/self.__cm_per_pixel_before:.3f}")
         print(f"cell_size: {self.cell_size:.3f} cm")
 
-        '''
-        # Test visuel de cell_size sur l'image croppée
-        print(f"cell_size (cm) = {self.cell_size}")
-        # Trace une ligne de longueur 5*cell_size sur l'image croppée
-        try:
-            frame_copy = frame.copy()
-            start_point = (20, 20)
-            end_point = (20 + int(5*self.cell_size / self.__cm_per_pixel_after), 20)
-            cv2.line(frame_copy, start_point, end_point, (255, 0, 255), 2)
-            cv2.imshow("Test cell_size (ligne magenta)", frame_copy)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-        except Exception as e:
-            print(f"Erreur lors du test visuel cell_size: {e}")
-            '''
-
         grid = np.zeros((grid_Ny, grid_Nx), dtype=int)
 
         #Filter red and yellow first -> to be more robust when creating the grid (and it is not too bad if grid creation takes slightly more time)
@@ -575,7 +559,7 @@ class Vision:
         frame_filtered[mask_red_yellow > 0] = [255, 255, 255]
 
         #Convert to grayscale for grid processing
-        gray = cv2.cvtColor(frame_filtered, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         #grid processing
         for i in range(grid_Ny):
@@ -676,6 +660,9 @@ class Vision:
         x_px, y_px, theta = self.get_thymio_pos(frame)
         if x_px is None or y_px is None:
             return None, None, None
+        
+        if self.__cm_per_pixel_after is None:
+            self.__cm_per_pixel_after = 1/self.get_start_pos_and_cm_per_pixel(frame)[2]
 
         # Convert pixel position to cm using the scale after cropping
         x_cm = x_px * self.__cm_per_pixel_after
