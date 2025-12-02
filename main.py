@@ -234,12 +234,12 @@ async def main():
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
-                v.vision(5,60,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
+                v.vision(5,50,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
                 v.plot_grid()
 
                 # si v est une instance de Vision et que v.vision(...) a été appelé
                 v.overlay_grid_on_cropped()          # ouvre une fenêtre avec la superposition
-                
+                 
                 gnav.set_gnav(v)
                 current_path, explored = gnav.grid_search()
 
@@ -306,6 +306,7 @@ async def main():
 
                 target_pos = None
                 error_pos = 0
+                visualizing_counter = 0
                 
             if state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
                 #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
@@ -320,21 +321,33 @@ async def main():
 
                 #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
                 #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
-                if pos_robot_vision[0] is None:#if kidnapped and it hides the aruco marker
-                    print("Kidnapped during path following (due to no robot detection)")
-                    state = State.KIDNAPPING
-                    await mc.node.set_variables(mc.motors(0, 0))#stop the motors
-                    just_changed_state = True
-                    continue
+                # if pos_robot_vision[0] is None:#if kidnapped and it hides the   marker
+                #     print("Kidnapped during path following (due to no robot detection)")
+                #     state = State.KIDNAPPING
+                #     await mc.node.set_variables(mc.motors(0, 0))#stop the motors
+                #     just_changed_state = True
+                #     continue
 
-                pos_robot_est = pos_est[0], pos_est[1]
-                print(f"POS VISION = {pos_robot_vision}; POS EST = {pos_robot_est}")
+                pos_robot_est = pos_est[0], pos_est[1] 
                 
-                # Display real-time visualization
+                # if visualizing_counter >= 2:
+                #     # Display real-time visualization
+                #     realtime_image = visualize_realtime(frame, vector_path_inversed, start_pos, 
+                #                                     cm_to_pixel_global, pos_robot_vision, pos_robot_est)
+                #     cv2.imshow("Real-time Navigation View", realtime_image)
+                #     cv2.waitKey(1)  # Afficher pendant 1ms pour permettre la mise à jour
+                #     visualizing_counter = 0
+                # else:
+                #     visualizing_counter += 1
                 realtime_image = visualize_realtime(frame, vector_path_inversed, start_pos, 
                                                     cm_to_pixel_global, pos_robot_vision, pos_robot_est)
                 cv2.imshow("Real-time Navigation View", realtime_image)
-                cv2.waitKey(1)  # Afficher pendant 1ms pour permettre la mise à jour
+                if pos_robot_vision[0] is None:
+                    cv2.waitKey(100)  # Afficher pendant 1ms pour permettre la mise à jour
+                else:
+                    cv2.waitKey(1)
+                print("Visualisation")
+                
 
                 if abs(np.subtract(pos_robot_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_robot_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
                     print(f"Robot at {pos_robot_est} and goal is {pos_to_goal[-1]}")

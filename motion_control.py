@@ -58,7 +58,7 @@ class Motion_control:
 
     def test_kidnapping(self, prox):
         global KIDNAPPING_THR
-        return max(prox) < KIDNAPPING_THR or not self.visible
+        return max(prox) < KIDNAPPING_THR and not self.visible
 
     async def follow_instruction(self, path, v, error_pos):
         return await self.path_following(path, v, error_pos)
@@ -67,7 +67,8 @@ class Motion_control:
         target_dist_steps = int(path[0])
         target_angle = path[1]
         step_count = 0
-
+        
+        print("start loop")
         while step_count < target_dist_steps:
             if test_obstacle_detected(list(self.node["prox.horizontal"])):
                 await self.node.set_variables(self.motors(0, 0))
@@ -77,7 +78,6 @@ class Motion_control:
 
             if not self.visible:
                 print("Robot not detected")
-                await self.node.set_variables(self.motors(0, 0))
                 return
 
             angular_spd_corr = error_angle * GAIN_ANGLE
@@ -95,7 +95,7 @@ class Motion_control:
             await self.client.sleep(STEP_DT)
             
             step_count += 1
-        #await self.node.set_variables(self.motors(0, 0))
+        print("end loop")
 
     def compute_error_angle(self, target, v):
         img = v.get_image(v._Vision__cap, False)
