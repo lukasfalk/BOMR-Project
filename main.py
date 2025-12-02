@@ -238,13 +238,17 @@ async def main():
                 v.overlay_grid_on_cropped()          # ouvre une fenêtre avec la superposition
 
                 gnav.set_gnav(v)
-                current_path, explored, opertation_count = gnav.grid_search()
+                current_path, explored = gnav.grid_search()
+
+                if (current_path == None) : 
+                    print("No path found, obstacles probably to close")
+                    break
 
                 update_filtering(mc)
 
                 gnav.display_grid_with_path(current_path)
-                gnav.display_grid_with_path([(10,10)])
                 gnav.display_colored_grid()
+                
                 print("A* path length =", len(current_path)-1, "\n", current_path)
 
                 # gnav -> find the array of vectors (deplacement at step k)
