@@ -6,10 +6,20 @@ import matplotlib.pyplot as plt
 
 Arucos: id 0 and 2 are used for the cut (i.e. to create the map) and 
         id 1 and 3 for start (i.e. thymio) and goal position (1 for start and 3 for goal)
-Grid: 0 = road, 1 = walls, 2 = start, 3 = goal
+Grid: 0 = road, 1 = walls
 
 Aruco size -> 5cm and max Robot size -> 12cm => cell size 
         
+"Origin direction": 
+in cm:
+    - x axis -> right
+    - y axis -> up
+in pixels:
+    - x axis -> right
+    - y axis -> down
+
+REMARK: Depending on your computer you could need to change the camera opening line: self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
+
 '''
 
 class Vision:
@@ -75,20 +85,6 @@ class Vision:
         #variables used to crop the image
         self._M, self._w, self._h = None, None, None
 
-        #Take the calibration data if it exists
-        try:
-            calib = np.load('camera_calibration.npz')
-            self.__camera_matrix = calib['camera_matrix']
-            self.__dist_coeffs = calib['dist_coeffs']
-            print("Calibration chargée avec succès")
-        except:
-            print("ATTENTION: Pas de calibration trouvée, distortion non corrigée!")
-            self.__camera_matrix = None
-            self.__dist_coeffs = None
-
-        if not self.__cap.isOpened():
-            raise Exception("Unable to open the camera")
-
     def __del__(self):
         #Release the camera
         self.__cap.release()
@@ -97,20 +93,13 @@ class Vision:
         self.wall_dilation = dilation
 
     ''''
-    Return one frame
-
+    Return one frame (filtered) from the camera
     The frame is a table: (length_x, length_y, 3)
     '''
     def get_image(self,cap,plot=False):
 
         # Read one frame
         ret, frame = cap.read()
-
-        '''
-        # Corriger la distortion si calibration disponible
-        if self.__camera_matrix is not None:
-            frame = cv2.undistort(frame, self.__camera_matrix, self.__dist_coeffs)
-            '''
 
         if not ret:
             raise Exception("Unable to capture the image")
