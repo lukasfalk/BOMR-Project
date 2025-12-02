@@ -44,8 +44,8 @@ class Vision:
         #Doesn't allow automatic rotations
         self.__cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 0)   
 
-        # Essayer de forcer une orientation spécifique (en degrés)
-        self.__cap.set(cv2.CAP_PROP_ORIENTATION_META, 0)  # ou 90, 180, 270 
+        #Force the orientation to 0
+        self.__cap.set(cv2.CAP_PROP_ORIENTATION_META, 0) 
 
         #Take the calibration data if it exists
         try:
@@ -354,8 +354,8 @@ class Vision:
     def cut_from_aruco(self,frame,centers):
 
         #Minimal rectangle around the centers
-        rect = cv2.minAreaRect(centers)     # (center,(w,h),angle)
-        box = cv2.boxPoints(rect)           # 4 coins du rectangle
+        rect = cv2.minAreaRect(centers)     #(center,(w,h),angle)
+        box = cv2.boxPoints(rect)           #4 corners
         box = box.astype(np.float32) 
 
         #Calculate actual distances between corners to preserve aspect ratio
@@ -679,9 +679,9 @@ class Vision:
             if len(aruco_pixel_sizes) > 0:
                 mean_pixels = np.mean(aruco_pixel_sizes)
                 if mean_pixels > 0:
-                    # pixels per cm
+                    #Number of pixels per cm
                     cm_to_pixel = mean_pixels / self._aruco_real_size_cm
-                    # store inverse if useful elsewhere
+                    #Store inverse if useful elsewhere
                     self.__cm_per_pixel_after = self._aruco_real_size_cm / mean_pixels
 
         #Now try to find id 1 and compute its position in cm with origin at bottom-left
