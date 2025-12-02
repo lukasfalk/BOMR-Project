@@ -60,10 +60,10 @@ class Motion_control:
         global KIDNAPPING_THR
         return max(prox) < KIDNAPPING_THR and not self.visible
 
-    async def follow_instruction(self, path, v, error_pos, angle):
-        return await self.path_following(path, v, error_pos, angle)
+    async def follow_instruction(self, path, error_pos, angle):
+        return await self.path_following(path, error_pos, angle)
 
-    async def path_following(self, path, v, error_pos, angle):
+    async def path_following(self, path, error_pos, angle):
         target_dist_steps = int(path[0])
         target_angle = path[1]
         step_count = 0
@@ -73,7 +73,7 @@ class Motion_control:
                 await self.node.set_variables(self.motors(0, 0))
                 return
             
-            error_angle = self.compute_error_angle(target_angle, v, angle)
+            error_angle = self.compute_error_angle(target_angle, angle)
 
             # if not self.visible:
             #     return
@@ -94,7 +94,7 @@ class Motion_control:
             
             step_count += 1
 
-    def compute_error_angle(self, target, v, angle):
+    def compute_error_angle(self, target, angle):
         if angle is None:
             self.visible = False
             return 0
@@ -107,11 +107,11 @@ class Motion_control:
             error = error + 2 * np.pi
         return error
 
-    async def fsm(self, path, v, error_pos, s, angle):
+    async def fsm(self, path, error_pos, s, angle):
         self.visible = True
         self.update_state()
         if self.state == "MOVE":
-            await self.follow_instruction(path, v, error_pos, angle)
+            await self.follow_instruction(path, error_pos, angle)
 
         self.update_state()
         if self.state == "KIDNAPPED":
