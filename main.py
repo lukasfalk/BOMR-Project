@@ -152,7 +152,11 @@ async def main():
         current_image = None
         cm_per_pixel_global = None
     
-        mc = await Motion_control.create()
+        try:
+            mc = await Motion_control.create()
+        except:
+            print("Could not connect to Thymio")
+            return
         gnav = GlobalNavigation()
         step_count = 0
         current_path = None  # Will be filled with displacement vectors
@@ -173,8 +177,7 @@ async def main():
                     just_changed_state = False
                     print("Kidnapped during path following")
                 x,_,_ = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
-                robot_detected = (x != None)
-                if robot_detected:
+                if x != None:
                     print("Robot detected after kidnapping")
                     await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
 
@@ -267,6 +270,13 @@ async def main():
                 frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
+                if pos_robot_vision[0] is None:#if kidnapped and it hides the aruco marker
+                    print("Kidnapped during path following (due to no robot detection)")
+                    state = State.KIDNAPPING
+                    await mc.node.set_variables(mc.motors(0, 0))#stop the motors
+                    just_changed_state = True
+                    continue
+
                 #pos_robot_est = pos_est[0], pos_est[1]
                 pos_robot_est = pos_robot_vision
                 print(f"POS VISION = {pos_robot_vision}; POS EST = {pos_robot_est}")
@@ -315,7 +325,7 @@ async def main():
             if state == State.GOAL_REACHED:
                 print(f"Goal reached")
                 await mc.node.set_variables(mc.motors(0, 0))
-                return
+                break
 
                 # #Wait finish signal
                 # cv2.waitKey(0)
@@ -338,4 +348,7 @@ def update_filtering(mc):
     pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except:
+        print("Program finished")
