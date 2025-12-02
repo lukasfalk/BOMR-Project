@@ -4,6 +4,7 @@ from matplotlib.colors import ListedColormap
 
 from heapq import heappush, heappop
 
+CHANGING_DIR_PENALITY = 1
 
 class GlobalNavigation : 
 
@@ -19,37 +20,6 @@ class GlobalNavigation :
         self.robot_size = None
         self.robot_size_cells = None
 
-        # '''
-        # Testing zone 
-        # '''
-        # # Testing zone: Generate a large grid for testing
-        # self.grid = np.ones((10, 10), dtype=int)  # Create a 20x20 grid filled with zeros
-        # self.Start = (0, 0)  # Top-left corner
-        # self.Goal = (9, 9)  # Bottom-right corner
-
-        # self.thymio_size = 1.5  # Taille maximale du robot (en unités réelles)
-        # self.cell_size = 1  # Taille d'une cellule (en unités réelles)
-
-        # # Calculer la taille totale en cellules
-        # self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
-        # self.robot_size_cells = 2 * self.robot_size + 1  # Rayon à gauche + centre + rayon à droite
-
-        # print("Rayon du robot en cellules :", self.robot_size)
-        # print("Taille totale du robot en cellules :", self.robot_size_cells)
-
-        # # Add some obstacles to the grid for testing
-        # self.grid[5, 5] = 0  # Small block
-        # # self.grid[10, 5:15] = 0  # Horizontal wall
-        # # self.grid[15:18, 10:12] = 0  # Small block
-
-        # # Print the grid for visualization
-        # print("Generated grid for testing:")
-        # print(self.grid)
-
-        # '''
-        # End Testing zone
-        # '''
-
     def set_gnav(self, vision):
 
         row, col = vision.thymio_pos
@@ -64,14 +34,6 @@ class GlobalNavigation :
         self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
         self.robot_size_cells = 2 * self.robot_size + 1  # Rayon à gauche + centre + rayon à droite
 
-        '''
-        Testing
-        '''
-        print("Rayon du robot en cellules :", self.robot_size)
-        print("Taille totale du robot en cellules :", self.robot_size_cells)
-        '''
-        Stop Testing
-        '''
 
     
     
@@ -85,13 +47,9 @@ class GlobalNavigation :
                 
                 if i >= len(self.grid) or j >= len(self.grid[0]):
                     print("Error : Thymio is not inside the grid !")
-                    return False
                 elif self.grid[i][j] == 0 :
                     print("Error : Thymio is on an obstable !")
-                    return False
 
-        return True
-    
     #Function to adapt the path for thymio robot dimension
     def growing_obstacles(self):
         
@@ -114,10 +72,6 @@ class GlobalNavigation :
                                 modified_grid[ni][nj] = 0 # adding obstacles
 
         self.grid = modified_grid
-
-    # def heuristic(self, a, b):
-    #     # Implement the Manhattan distance heuristic
-    #     return abs(a[0] - b[0]) + abs(a[1] - b[1])
     
     #Compute the diagonal heuristic
     def heuristic(self, a, b) : 
@@ -133,13 +87,14 @@ class GlobalNavigation :
     def grid_search(self): 
         
         #Function to adapt the path for thymio robot dimension
-        self.growing_obstacles()
-        a = self.verification()
-        ## initialize the variables above
-        came_from = {}      # to reconstruct path
-        g_costs = {self.Start: 0}    # cost from start to the cell
-        explored = set()    # to keep track of explored cells
-        operation_count = 0 # to count the number of operations
+        self.growing_obstacles()            #function to growth obstacle size
+        self.verification()                 #Print error message if outside 
+
+        # initialize the variables above
+        came_from = {}                      # to reconstruct path
+        g_costs = {self.Start: 0}           # cost from start to the cell
+        explored = set()                    # to keep track of explored cells
+        dir = {self.Start: (0, 0)}                            #to track the direction and add a direction penality        
 
         open_set = [(self.heuristic(self.Start, self.Goal), 0, self.Start)]  # priority queue for A* (f_cost, g_cost, position)
             
@@ -152,7 +107,7 @@ class GlobalNavigation :
             if current_pos == self.Goal: # if Goal is marked then stop the algorithme
                 break
 
-            # Get neighbors -> be careful it is like a matrix
+            # Get neighbors -> be careful it is like a matrix so we do (y, x)
             neighbors = [
                 (current_pos[0]-1, current_pos[1]),   #Up
                 (current_pos[0]+1, current_pos[1]),   #Down
@@ -166,31 +121,36 @@ class GlobalNavigation :
 
             for neighbor in neighbors: # for each neighbor of marked cells
                 # Check if neighbor is within bounds
-                if (0 <= neighbor[0] < len(self.grid)) and (0 <= neighbor[1] < self.grid.shape[1]): #check if the neighbor is less than 1 and greater than 0
+                if ((0 <= neighbor[0] < len(self.grid)) and 
+                    (0 <= neighbor[1] < self.grid.shape[1])):
                     
                     # Check if neighbor is not an obstacle
                     if self.grid[neighbor[0], neighbor[1]] != 0 :
 
                         if neighbor in explored:
                             continue
+                        
+                        dir[neighbor] = (neighbor[0] - current_pos[0], neighbor[1] - current_pos[1])
 
-                        if (abs(neighbor[0] - current_pos[0]) == 1 and abs(neighbor[1] - current_pos[1]) == 1) :
-                            is_diagonal = True 
-                        else : 
-                            is_diagonal = False 
-
-                        if is_diagonal : 
+                        #Compute cost for distance
+                        if (abs(neighbor[0] - current_pos[0]) == 1 and 
+                            abs(neighbor[1] - current_pos[1]) == 1) :
                             move_cost = np.sqrt(2) #Diagonal cost is sqrt(2)
                         else : 
                             move_cost = 1 #Orthogonal cost is 1 
                         
-                        tentative_g_cost = current_g_cost + move_cost
-                        #tentative_g_cost = current_g_cost + self.grid[neighbor[0], neighbor[1]]
+                        #Compute cost for angle penality 
+                        if ((dir[current_pos] != (0, 0)) and
+                            (dir[neighbor] != dir[current_pos])) : 
+                            dir_cost = CHANGING_DIR_PENALITY  #Penality of 1
+                        else : 
+                            dir_cost = 0
+
+                        tentative_g_cost = current_g_cost + move_cost + dir_cost
 
                         if neighbor not in g_costs or tentative_g_cost < g_costs[neighbor]:
                             g_costs[neighbor] = tentative_g_cost
-                            came_from[neighbor] = current_pos
-                            operation_count += 1 
+                            came_from[neighbor] = current_pos 
                         
                             f_cost = tentative_g_cost + self.heuristic(neighbor, self.Goal)
                             heappush(open_set, (f_cost, tentative_g_cost, neighbor))
@@ -203,10 +163,10 @@ class GlobalNavigation :
                 current_pos = came_from[current_pos]
             path.append(self.Start)
             path.reverse()
-            return path, explored, operation_count  # Return reversed path and explored cells
+            return path, explored, None  # Return reversed path and explored cells
         else:
         # If we reach here, no path was found
-            return None, explored, operation_count
+            return None, explored, None
         
     def display_grid_with_path(self, path):
 
@@ -243,9 +203,6 @@ class GlobalNavigation :
                     grid_with_path[ni, nj] = 4
 
         self.grid = grid_with_path
-        # Afficher la grille avec le chemin
-        #print("Grid with path:")
-        #print(grid_with_path)
 
    
     def display_colored_grid(self):
@@ -271,7 +228,7 @@ class GlobalNavigation :
         
         path = np.array(path)
 
-        #[dy, dx] = [y[i+1] - y[i], x[i+1] - x[i]]
+        #[delta_y, delta_x] = [y[i+1] - y[i], x[i+1] - x[i]]
         delta = np.diff(path, axis = 0)
 
         #Norm between two cells in the center
