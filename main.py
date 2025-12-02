@@ -65,18 +65,20 @@ def plot_path_on_image(image, displacements, start_pos_cm, cm_to_pixel):
         y_px = int(image.shape[0] - pos[1] * cm_to_pixel)
         positions_px.append((x_px, y_px))
     
-    # Draw circles and lines for each position
+    #Draw circles and lines for each position
     for i, (x, y) in enumerate(positions_px):
-        # Ensure coordinates are within image bounds
+        #Ensure coordinates are within image bounds
         if 0 <= x < image.shape[1] and 0 <= y < image.shape[0]:
-            if i == 0:  # Start point - green
+            if i == 0:  #Start point -> green
                 cv2.circle(image_with_path, (x, y), 5, (0, 255, 0), -1)
-            elif i == len(positions_px) - 1:  # End point - blue
+            elif i == len(positions_px) - 1:  #End point -> blue
                 cv2.circle(image_with_path, (x, y), 5, (255, 0, 0), -1)
-            else:  # Path points - red
+            else:  #Path points -> red
                 cv2.circle(image_with_path, (x, y), 3, (0, 0, 255), -1)
+        else:
+            print(f"Position {(x, y)} is out of image bounds and will not be drawn.")
     
-    # Draw lines connecting the path points
+    #Draw lines connecting the path points
     for i in range(len(positions_px) - 1):
         x1, y1 = positions_px[i]
         x2, y2 = positions_px[i+1]
@@ -155,31 +157,49 @@ async def main():
         step_count = 0
         current_path = None  # Will be filled with displacement vectors
         
-        just_changed_state = True  
+        just_changed_state = False  
         state = State.GRID_CREATION
 
         vector_path_inversed = []
+
+        v.cam_centering()
         while(1):
             if state == State.KIDNAPPING:
-                print("Kidnapped during path following")
-                robot_detected = v.get_thymio_pos(v.get_image(v._Vision__cap, False)) is not None
+                if just_changed_state:
+                    await mc.client.sleep(0.1)
+                    #empty the camera buffer
+                    for idx in range(50):
+                        _ = v.get_image(v._Vision__cap, False)
+                    just_changed_state = False
+                    print("Kidnapped during path following")
+                x,_,_ = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
+                robot_detected = (x != None)
                 if robot_detected:
                     print("Robot detected after kidnapping")
                     await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
+
+                    #empty the camera buffer
+                    for idx in range(50):
+                        _ = v.get_image(v._Vision__cap, False) 
+
                     state = State.GRID_CREATION
+                    just_changed_state = True
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
-                v.cam_centering()
-                v.vision(5,90,False,10)
+                v.vision(5,80,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
                 v.plot_grid()
+
+                # si v est une instance de Vision et que v.vision(...) a été appelé
+                v.overlay_grid_on_cropped()          # ouvre une fenêtre avec la superposition
+
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
 
                 update_filtering(mc)
 
-                #gnav.display_grid_with_path(current_path)
-                #gnav.display_colored_grid()
+                gnav.display_grid_with_path(current_path)
+                gnav.display_colored_grid()
                 print("A* path length =", len(current_path)-1, "\n", current_path)
 
                 # gnav -> find the array of vectors (deplacement at step k)
@@ -192,6 +212,7 @@ async def main():
 
                 step_count = 0
 
+                vector_path_inversed = [] #in case of kidnapping we do not want the paths to adds up
                 for idx in range(len(vector_path)):
                     norm, angle = vector_path[idx]
                     vector_path_inversed.append((norm,-1*angle))  #invert angle to have the right orientation (vision has y inverted compared to robot frame)
@@ -240,6 +261,7 @@ async def main():
                     y = prev_y + norm * np.sin(angle)  
                     pos_to_goal.append((x, y))
                 state = State.GLOBAL_NAVIGATION
+                just_changed_state = True
                 print(f"Pos to goal = {pos_to_goal}")
 
                 target_pos = None
@@ -291,7 +313,7 @@ async def main():
                     print(f"Step {step_count-1} (norm, angle): {next_step}")
                     state = await mc.fsm(next_step, v, error_pos, state)
 
-                if state != State.GOAL_REACHED: # try to reach again the goal
+                elif state != State.GOAL_REACHED: # try to reach again the goal
                     step_count -= 1
 
             if state == State.GOAL_REACHED:

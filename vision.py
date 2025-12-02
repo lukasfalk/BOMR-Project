@@ -699,10 +699,7 @@ class Vision:
         Detecte l'ArUco d'id 1 (start) dans l'image fournie et renvoie la position
         de départ en centimètres ainsi que le facteur `pixels par cm` (cm_to_pixel).
         """
-        cv2.imshow("get start pos", frame)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        #Convert to grayscale    
+        #Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         parameters = cv2.aruco.DetectorParameters()
