@@ -61,6 +61,7 @@ class Filtering :
     def update_state_est(self, z: np.ndarray):
         ''' Update the state estimate with measurement z'''
         H = np.eye(3)  # Measurement model
+        print(z)
         inno = z - H @ self.x_pred     # Innovation
         S = H @ self.P_pred @ H.T + self.R  # Innovation covariance
         K = self.P_pred @ H.T @ inv(S) # Kalman gain
@@ -87,7 +88,7 @@ class Filtering :
         self.predict_state_est()
 
         # Update step
-        if z is not None:
+        if any(x is not None for x in z):
             self.update_state_est(z)
         else:
             # No measurement update. Estimated states are the predicted states

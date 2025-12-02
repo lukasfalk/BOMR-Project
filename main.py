@@ -122,18 +122,6 @@ def displacement_angle_to_origin_angle(path):
         abs_path.append((norm, normalized))
     return abs_path
 
-def update_filtering(mc):
-    global v, ekf, pos_est, P_est, pos_pred
-    frame = v.get_image(v._Vision__cap, False)
-    frame = v.get_image(v._Vision__cap, False)
-    pos_vision = (None, None)
-    pos_vision = v.get_thymio_pos_in_cm(frame)
-
-    l = mc.node["motor.left.speed"]
-    r = mc.node["motor.right.speed"]
-
-    pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
-
 #TODO:
 # passer le tableau de vecteur de déplacement en (x,y)_k (soit garder le bordel dans le main pour l'instant soit faire une vraie fonction)
 # finir le controlleur (ATTENTION -> angle pas dans le même repère -> cf. au fond de vision.py pour des fonctions de test de l'angle) (orientation caméra -> texte lisible depuis la map)
@@ -188,7 +176,7 @@ async def main():
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
 
-                update_filtering(mc, ekf)
+                update_filtering(mc)
 
                 #gnav.display_grid_with_path(current_path)
                 #gnav.display_colored_grid()
@@ -210,15 +198,15 @@ async def main():
 
                 if vector_path is not None:
                     #current_image = v.get_image(v._Vision__cap, False)
-                    current_image = v.get_cutted_frame(True,True)
+                    current_image = v.get_cutted_frame(False,False)
                     print("image size:", current_image.shape)
                 
                 if current_image is not None:
                     # Plot the image with the paths (displacement vectors)
                     # Get start position (cm), scale (pixels/cm) and start orientation (radians)
-                    x_cm, y_cm, cm_per_pixel, start_orientation = v.get_start_pos_and_cm_per_pixel(current_image)
+                    x_cm, y_cm, cm_to_pixel, start_orientation = v.get_start_pos_and_cm_to_pixel(current_image)
 
-                    if cm_per_pixel is None:
+                    if cm_to_pixel is None:
                         print("Scale unavailable: skipping path plotting")
                     else:
                         if x_cm is None or y_cm is None:
@@ -238,10 +226,10 @@ async def main():
                             biased_angle = angle - start_orientation
                             vector_path_biased.append((norm, biased_angle))
 
-                        image_with_path = plot_path_on_image(current_image, vector_path_inversed, start_pos, cm_per_pixel)
+                        image_with_path = plot_path_on_image(current_image, vector_path_inversed, start_pos, cm_to_pixel)
             
                 # save scale (pixels per cm) for later conversions
-                cm_per_pixel_global = cm_per_pixel
+                cm_to_pixel_global = cm_to_pixel
 
                 #vector_path_inversed = [(0, 0), (0, np.pi),(0, np.pi),(0, np.pi)]
                 next_step = None
@@ -318,6 +306,18 @@ async def main():
 
     finally:
         await mc.close()
+
+def update_filtering(mc):
+    global v, ekf, pos_est, P_est, pos_pred
+    frame = v.get_image(v._Vision__cap, False)
+    frame = v.get_image(v._Vision__cap, False)
+    pos_vision = (None, None)
+    pos_vision = v.get_thymio_pos_in_cm(frame)
+
+    l = mc.node["motor.left.speed"]
+    r = mc.node["motor.right.speed"]
+
+    pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
 
 if __name__ == "__main__":
     asyncio.run(main())
