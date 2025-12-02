@@ -25,6 +25,8 @@ ekf = Filtering()
 pos_est = np.zeros(3)
 P_est = np.diag([1e-3, 1e-3, 1e-3])
 
+first_call_filter = True
+
 class State(Enum):
     GRID_CREATION = 0
     GLOBAL_NAVIGATION = 1
@@ -181,10 +183,10 @@ def displacement_angle_to_origin_angle(path):
 # sortie avoidance -> le faire + fct qui trouve le next step le plus proche de la position actuelle (pas besoin de partir depuis le début du path mais depuis le dernier step_count (i.e. celui avant avoidance))
 # -> faire un step_count bien fait dans le main
 async def main():
-    global v
+    global v, pos_est, P_est, pos_pred
     # threshold (cm) to consider the final goal reached
     GOAL_EPS_CM = 2.0
-    SKIP_STEPS =  3
+    SKIP_STEPS =  3 
 
     try:        
         # Initialize variables for path visualization
@@ -207,6 +209,7 @@ async def main():
         vector_path_inversed = []
 
         v.cam_centering()
+
         while(1):
             if state == State.KIDNAPPING:
                 if just_changed_state:
@@ -246,8 +249,7 @@ async def main():
 
                 frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
-                pos_est = v.get_thymio_pos_in_cm(frame)[:2]
-                update_filtering(mc)
+                pos_est = v.get_thymio_pos_in_cm(frame)
 
                 gnav.display_grid_with_path(current_path)
                 gnav.display_colored_grid()
@@ -311,10 +313,10 @@ async def main():
                 #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
                 #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
 
-                update_filtering(mc)
                 frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
+                pos_est, P_est, pos_pred = update_filtering(mc)
 
                 #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
                 #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
@@ -326,13 +328,11 @@ async def main():
                     continue
 
                 pos_robot_est = pos_est[0], pos_est[1]
-                #pos_robot_est = pos_robot_vision
                 print(f"POS VISION = {pos_robot_vision}; POS EST = {pos_robot_est}")
                 
                 # Display real-time visualization
-                pos_estimated_test = (10, 10)  # Position de test à remplacer plus tard
                 realtime_image = visualize_realtime(frame, vector_path_inversed, start_pos, 
-                                                    cm_to_pixel_global, pos_robot_vision, pos_estimated_test)
+                                                    cm_to_pixel_global, pos_robot_vision, pos_robot_est)
                 cv2.imshow("Real-time Navigation View", realtime_image)
                 cv2.waitKey(1)  # Afficher pendant 1ms pour permettre la mise à jour
 
@@ -375,7 +375,7 @@ async def main():
                     state = await mc.fsm(next_step, v, error_pos, state)
 
                 elif state != State.GOAL_REACHED: # try to reach again the goal
-                    step_count -= 1
+                    step_count -= 1 
 
             if state == State.GOAL_REACHED:
                 print(f"Goal reached")
@@ -393,20 +393,17 @@ async def main():
         await mc.close()
 
 def update_filtering(mc):
-    global v, ekf, pos_est, P_est, pos_pred
+    global v, ekf, pos_est, P_est, pos_pred, first_call_filter
     frame = v.get_image(v._Vision__cap, False)
-    frame = v.get_image(v._Vision__cap, False)
-    pos_vision = (None, None)
-    #pos_vision = v.get_thymio_pos_in_cm(frame)
-    print("Prcessing vision")
+    frame = v.get_cutted_frame(False, False)
+    pos_vision = v.get_thymio_pos_in_cm(frame)
     l = mc.node["motor.left.speed"]
     r = mc.node["motor.right.speed"]
-    print(f"Left speed = {l}; Right speed = {r}")
-
+    if first_call_filter:
+        pos_est = pos_vision
+        first_call_filter = False
     pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
+    return pos_est, P_est, pos_pred
 
 if __name__ == "__main__":
-    try:
         asyncio.run(main())
-    except:
-        print("Program finished")
