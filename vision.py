@@ -619,7 +619,8 @@ class Vision:
 
         #Convert pixel position to cm using the scale after cropping
         x_cm = x_px * self.__cm_per_pixel_after
-        y_cm = y_px * self.__cm_per_pixel_after
+        # Invert y-axis to have origin at bottom-left instead of top-left
+        y_cm = (frame.shape[0] - y_px) * self.__cm_per_pixel_after
 
         return x_cm, y_cm, theta
     

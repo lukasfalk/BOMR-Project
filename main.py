@@ -284,6 +284,10 @@ async def main():
                     # convert pixel coords to cm and to bottom-left origin
                     x_cm_robot = x_px / cm_per_pixel_global
                     y_cm_robot = (frame.shape[0] - y_px) / cm_per_pixel_global
+                    x_autre_cm = v.get_thymio_pos_in_cm(frame)[0]
+                    y_autre_cm = v.get_thymio_pos_in_cm(frame)[1]
+                    print(f"Robot position from px->cm: x={x_cm_robot:.2f} cm, y={y_cm_robot:.2f} cm")
+                    print(f"Robot position from dedicated function: x={x_autre_cm:.2f} cm, y={y_autre_cm:.2f} cm")
                     robot_pos = (x_cm_robot, y_cm_robot)
                     #print(f"rob pos = {robot_pos}")
 
