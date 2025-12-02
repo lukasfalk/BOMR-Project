@@ -329,6 +329,7 @@ async def main():
                 #     continue
 
                 pos_robot_est = pos_est[0], pos_est[1] 
+                angle_robot_est =  pos_est[2] 
                 
                 # if visualizing_counter >= 2:
                 #     # Display real-time visualization
@@ -385,7 +386,7 @@ async def main():
 
                     print(f"Robot at {pos_robot_est} and going to {target_pos}")
                     print(f"Step {step_count-1} (norm, angle): {next_step}")
-                    state = await mc.fsm(next_step, v, error_pos, state)
+                    state = await mc.fsm(next_step, v, error_pos, state, angle_robot_est)
 
                 elif state != State.GOAL_REACHED: # try to reach again the goal
                     step_count -= 1 
@@ -416,6 +417,8 @@ def update_filtering(mc):
         pos_est = pos_vision
         first_call_filter = False
     pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
+    _, _, robot = v.get_thymio_pos(frame)
+    print(f"Abs angle = {robot}; Estimated angle = {pos_est[2]}")
     return pos_est, P_est, pos_pred
 
 if __name__ == "__main__":

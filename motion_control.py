@@ -60,25 +60,23 @@ class Motion_control:
         global KIDNAPPING_THR
         return max(prox) < KIDNAPPING_THR and not self.visible
 
-    async def follow_instruction(self, path, v, error_pos):
-        return await self.path_following(path, v, error_pos)
+    async def follow_instruction(self, path, v, error_pos, angle):
+        return await self.path_following(path, v, error_pos, angle)
 
-    async def path_following(self, path, v, error_pos):
+    async def path_following(self, path, v, error_pos, angle):
         target_dist_steps = int(path[0])
         target_angle = path[1]
         step_count = 0
         
-        print("start loop")
         while step_count < target_dist_steps:
             if test_obstacle_detected(list(self.node["prox.horizontal"])):
                 await self.node.set_variables(self.motors(0, 0))
                 return
             
-            error_angle = self.compute_error_angle(target_angle, v)
+            error_angle = self.compute_error_angle(target_angle, v, angle)
 
-            if not self.visible:
-                print("Robot not detected")
-                return
+            # if not self.visible:
+            #     return
 
             angular_spd_corr = error_angle * GAIN_ANGLE
             linear_spd_corr = error_pos * GAIN_FWD
@@ -95,18 +93,13 @@ class Motion_control:
             await self.client.sleep(STEP_DT)
             
             step_count += 1
-        print("end loop")
 
-    def compute_error_angle(self, target, v):
-        img = v.get_image(v._Vision__cap, False)
-        _, _, robot = v.get_thymio_pos(img)
-        _, _, robot = v.get_thymio_pos(img)
-        
-        if robot is None:
+    def compute_error_angle(self, target, v, angle):
+        if angle is None:
             self.visible = False
             return 0
             
-        error = target - robot
+        error = target - angle
         
         if error > np.pi:
             error = error - 2 * np.pi
@@ -114,11 +107,11 @@ class Motion_control:
             error = error + 2 * np.pi
         return error
 
-    async def fsm(self, path, v, error_pos, s):
+    async def fsm(self, path, v, error_pos, s, angle):
         self.visible = True
         self.update_state()
         if self.state == "MOVE":
-            await self.follow_instruction(path, v, error_pos)
+            await self.follow_instruction(path, v, error_pos, angle)
 
         self.update_state()
         if self.state == "KIDNAPPED":
