@@ -61,7 +61,6 @@ class Filtering :
     def update_state_est(self, z: np.ndarray):
         ''' Update the state estimate with measurement z'''
         H = np.eye(3)  # Measurement model
-        print(z)
         inno = z - H @ self.x_pred     # Innovation
         S = H @ self.P_pred @ H.T + self.R  # Innovation covariance
         K = self.P_pred @ H.T @ inv(S) # Kalman gain

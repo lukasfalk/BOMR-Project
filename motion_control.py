@@ -40,7 +40,7 @@ class Motion_control:
             pass
 
     def motors(self, l, r):
-        update_filtering(self)
+        #update_filtering(self)
         return {"motor.left.target": [int(l)], "motor.right.target": [int(r)]}
 
     def update_state(self):
