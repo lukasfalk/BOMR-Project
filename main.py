@@ -61,18 +61,20 @@ def plot_path_on_image(image, displacements, start_pos_cm, cm_to_pixel):
         y_px = int(image.shape[0] - pos[1] * cm_to_pixel)
         positions_px.append((x_px, y_px))
     
-    # Draw circles and lines for each position
+    #Draw circles and lines for each position
     for i, (x, y) in enumerate(positions_px):
-        # Ensure coordinates are within image bounds
+        #Ensure coordinates are within image bounds
         if 0 <= x < image.shape[1] and 0 <= y < image.shape[0]:
-            if i == 0:  # Start point - green
+            if i == 0:  #Start point -> green
                 cv2.circle(image_with_path, (x, y), 5, (0, 255, 0), -1)
-            elif i == len(positions_px) - 1:  # End point - blue
+            elif i == len(positions_px) - 1:  #End point -> blue
                 cv2.circle(image_with_path, (x, y), 5, (255, 0, 0), -1)
-            else:  # Path points - red
+            else:  #Path points -> red
                 cv2.circle(image_with_path, (x, y), 3, (0, 0, 255), -1)
+        else:
+            print(f"Position {(x, y)} is out of image bounds and will not be drawn.")
     
-    # Draw lines connecting the path points
+    #Draw lines connecting the path points
     for i in range(len(positions_px) - 1):
         x1, y1 = positions_px[i]
         x2, y2 = positions_px[i+1]
@@ -217,10 +219,10 @@ async def main():
                 if current_image is not None:
                     # Plot the image with the paths (displacement vectors)
                     # Get start position (cm), scale (pixels/cm) and start orientation (radians)
-                    x_cm, y_cm, cm_per_pixel, start_orientation = v.get_start_pos_and_cm_per_pixel(current_image)
-                    print(f"Start pos (cm): x={x_cm}, y={y_cm}, cm_per_pixel={cm_per_pixel}, start_orientation (rad)={start_orientation}")
+                    x_cm, y_cm, cm_to_pixel, start_orientation = v.get_start_pos_and_cm_to_pixel(current_image)
+                    print(f"Start pos (cm): x={x_cm}, y={y_cm}, cm_to_pixel={cm_to_pixel}, start_orientation (rad)={start_orientation}")
 
-                    if cm_per_pixel is None:
+                    if cm_to_pixel is None:
                         print("Scale unavailable: skipping path plotting")
                     else:
                         if x_cm is None or y_cm is None:
@@ -240,10 +242,10 @@ async def main():
                             biased_angle = angle - start_orientation
                             vector_path_biased.append((norm, biased_angle))
 
-                        image_with_path = plot_path_on_image(current_image, vector_path_inversed, start_pos, cm_per_pixel)
+                        image_with_path = plot_path_on_image(current_image, vector_path_inversed, start_pos, cm_to_pixel)
             
                 # save scale (pixels per cm) for later conversions
-                cm_per_pixel_global = cm_per_pixel
+                cm_to_pixel_global = cm_to_pixel
 
                 #vector_path_inversed = [(0, 0), (0, np.pi),(0, np.pi),(0, np.pi)]
                 next_step = None
@@ -276,7 +278,7 @@ async def main():
 
                     # ensure we have scale (pixels per cm); try to recover if missing
                     if cm_per_pixel_global is None:
-                        _, _, cm_per_pixel_fallback, _ = v.get_start_pos_and_cm_per_pixel(frame)
+                        _, _, cm_per_pixel_fallback, _ = v.get_start_pos_and_cm_to_pixel(frame)
                         cm_per_pixel_global = cm_per_pixel_fallback
 
                     # convert pixel coords to cm and to bottom-left origin
