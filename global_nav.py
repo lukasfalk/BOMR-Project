@@ -76,7 +76,6 @@ class GlobalNavigation :
         explored = set()                    # to keep track of explored cells
 
         open_set = [(self.heuristic(self.Start, self.Goal), 0, self.Start)]  # priority queue for A* (f_cost, g_cost, position)
-            
         while open_set: # Goal is unmarked
         
             current_f_cost, current_g_cost, current_pos = heappop(open_set) #Take the last position in grid
@@ -124,7 +123,6 @@ class GlobalNavigation :
                         if neighbor not in g_costs or tentative_g_cost < g_costs[neighbor]:
                             g_costs[neighbor] = tentative_g_cost
                             came_from[neighbor] = current_pos
-                            operation_count += 1 
                         
                             f_cost = tentative_g_cost + self.heuristic(neighbor, self.Goal)
                             heappush(open_set, (f_cost, tentative_g_cost, neighbor))
