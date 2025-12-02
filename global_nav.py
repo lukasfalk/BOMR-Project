@@ -4,7 +4,7 @@ from matplotlib.colors import ListedColormap
 
 from heapq import heappush, heappop
 
-CHANGING_DIR_PENALITY = 1
+CHANGING_DIR_PENALITY = 0.25
 
 class GlobalNavigation : 
 
@@ -173,7 +173,7 @@ class GlobalNavigation :
         # Créer une copie de la grille pour ne pas modifier l'originale
         grid_with_path = self.grid.copy()
 
-        thickness = 2  # Épaisseur pour le chemin, start et goal
+        thickness = 0  # Épaisseur pour le chemin, start et goal
         half_thickness = thickness // 2
 
         # Marquer le chemin sur la grille avec épaisseur
@@ -245,3 +245,38 @@ class GlobalNavigation :
             vector = list(zip(norm, angles))
 
         return vector 
+    
+
+    def run_test(self):
+        # Définir la taille de la grille
+        rows, cols = 32, 53
+        self.grid = np.ones((rows, cols), dtype=int)  # Grille remplie de 1 (cellules accessibles)
+
+        # Placer le start et le goal aux deux extrémités
+        self.Start = (0, 0)  # Coin supérieur gauche
+        self.Goal = (rows - 1, cols - 1)  # Coin inférieur droit
+
+        # Ajouter un carré d'obstacles au milieu de la grille
+        mid_row, mid_col = rows // 2, cols // 2
+        square_size = 6  # Taille du carré (6x6)
+        for i in range(mid_row - square_size // 2, mid_row + square_size // 2):
+            for j in range(mid_col - square_size // 2, mid_col + square_size // 2):
+                self.grid[i, j] = 0  # 0 représente un obstacle
+
+        # Définir les autres paramètres
+        self.cell_size = 1.36
+        self.thymio_size = 12
+
+        # Adapter la taille du robot à la grille
+        self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2  # np.ceil pour prendre l'entier supérieur
+
+        path, explored, _ = self.grid_search()
+        self.display_grid_with_path(path)
+        self.display_colored_grid()
+
+
+if __name__ == "__main__":
+
+    gnav = GlobalNavigation()
+    gnav.run_test()   # exécuté uniquement si on lance ce fichier directement
+       
