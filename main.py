@@ -32,22 +32,20 @@ class State(Enum):
     GOAL_REACHED = 3
     OBS_AVOIDED = 4
 
-def plot_path_on_image(image, displacements, start_pos_cm, cm_to_pixel):
+def calculate_path_positions(displacements, start_pos_cm):
     """
-    Draw the displacement vectors on the raw image
+    Calculate path positions from displacement vectors
     
     Args:
-        image: The raw image to draw on (BGR format)
-        displacements: List of displacement vectors at each step [(norm1, angle1), (norm2, angle2), ...]
+        displacements: List of displacement vectors [(norm1, angle1), (norm2, angle2), ...]
                       where norm is in cm and angle is in radians
         start_pos_cm: Starting position (x, y) in cm
-        cm_to_pixel: Conversion factor from cm to pixels (pixels per cm)
-    """
-    image_with_path = image.copy()
     
+    Returns:
+        path_positions: List of positions in cm [(x1, y1), (x2, y2), ...]
+    """
     # Calculate accumulated position from displacements (norm and angle) in cm
     current_pos = np.array(start_pos_cm, dtype=float)
-    print("Starting position (cm):", current_pos[0],"  ", current_pos[1])
     positions = [current_pos.copy()]
     
     for norm, angle in displacements:
@@ -57,44 +55,97 @@ def plot_path_on_image(image, displacements, start_pos_cm, cm_to_pixel):
         current_pos += np.array([dx, dy])
         positions.append(current_pos.copy())
     
-    # Convert all positions from cm to pixels
-    positions_px = []
-    for pos in positions:
-        x_px = int(pos[0] * cm_to_pixel)
-        # Inverser y car les pixels augmentent vers le bas, pas vers le haut
-        y_px = int(image.shape[0] - pos[1] * cm_to_pixel)
-        positions_px.append((x_px, y_px))
+    return positions
+
+def visualize_realtime(image, global_path_displacements, start_pos_cm, cm_to_pixel, pos_measured_cm, pos_estimated_cm=(10, 10)):
+    """
+    Display real-time view of camera with global path and two positions
     
-    #Draw circles and lines for each position
-    for i, (x, y) in enumerate(positions_px):
-        #Ensure coordinates are within image bounds
-        if 0 <= x < image.shape[1] and 0 <= y < image.shape[0]:
-            if i == 0:  #Start point -> green
-                cv2.circle(image_with_path, (x, y), 5, (0, 255, 0), -1)
-            elif i == len(positions_px) - 1:  #End point -> blue
-                cv2.circle(image_with_path, (x, y), 5, (255, 0, 0), -1)
-            else:  #Path points -> red
-                cv2.circle(image_with_path, (x, y), 3, (0, 0, 255), -1)
-        else:
-            print(f"Position {(x, y)} is out of image bounds and will not be drawn.")
+    Args:
+        image: The cropped camera image (BGR format)
+        global_path_displacements: List of displacement vectors [(norm1, angle1), (norm2, angle2), ...]
+                                   where norm is in cm and angle is in radians (angles should be INVERTED for display)
+        start_pos_cm: Starting position (x, y) in cm
+        cm_to_pixel: Conversion factor from cm to pixels (pixels per cm)
+        pos_measured_cm: Position measured with get_thymio_pos_cm (x, y) in cm
+        pos_estimated_cm: Second position (x, y) in cm (default (10, 10))
     
-    #Draw lines connecting the path points
-    for i in range(len(positions_px) - 1):
-        x1, y1 = positions_px[i]
-        x2, y2 = positions_px[i+1]
+    Returns:
+        image_with_overlay: Image with path and positions drawn
+    """
+    image_overlay = image.copy()
+    
+    # Calculate path positions from displacements using the helper function
+    path_positions = calculate_path_positions(global_path_displacements, start_pos_cm)
+    
+    # Convert path positions from cm to pixels
+    def cm_to_px(pos_cm):
+        x_px = int(pos_cm[0] * cm_to_pixel)
+        y_px = int(image.shape[0] - pos_cm[1] * cm_to_pixel)
+        return (x_px, y_px)
+    
+    path_positions_px = [cm_to_px(pos) for pos in path_positions]
+    
+    # Draw global path
+    for i in range(len(path_positions_px) - 1):
+        x1, y1 = path_positions_px[i]
+        x2, y2 = path_positions_px[i+1]
         
         if (0 <= x1 < image.shape[1] and 0 <= y1 < image.shape[0] and
             0 <= x2 < image.shape[1] and 0 <= y2 < image.shape[0]):
-            cv2.line(image_with_path, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            cv2.line(image_overlay, (x1, y1), (x2, y2), (0, 165, 255), 2)  # Orange path
     
-    plt.figure(figsize=(12, 8))
-    plt.imshow(cv2.cvtColor(image_with_path, cv2.COLOR_BGR2RGB))
-    plt.title("Path Visualization on Raw Image")
-    plt.xlabel("X (pixels)")
-    plt.ylabel("Y (pixels)")
-    plt.show()
+    # Draw path waypoints
+    for i, (x, y) in enumerate(path_positions_px):
+        if 0 <= x < image.shape[1] and 0 <= y < image.shape[0]:
+            if i == 0:  # Start -> green
+                cv2.circle(image_overlay, (x, y), 6, (0, 255, 0), -1)
+            elif i == len(path_positions_px) - 1:  # Goal -> blue
+                cv2.circle(image_overlay, (x, y), 6, (255, 0, 0), -1)
+            else:  # Intermediate waypoints -> small orange circles
+                cv2.circle(image_overlay, (x, y), 3, (0, 165, 255), -1)
     
-    return image_with_path
+    # Draw measured position (red circle with cross)
+    if pos_measured_cm[0] is not None and pos_measured_cm[1] is not None:
+        pos_measured_px = cm_to_px(pos_measured_cm)
+        if (0 <= pos_measured_px[0] < image.shape[1] and 
+            0 <= pos_measured_px[1] < image.shape[0]):
+            cv2.circle(image_overlay, pos_measured_px, 8, (0, 0, 255), 2)  # Red circle
+            cv2.drawMarker(image_overlay, pos_measured_px, (0, 0, 255), 
+                          cv2.MARKER_CROSS, 12, 2)  # Red cross
+    
+    # Draw estimated position (cyan circle with cross)
+    if pos_estimated_cm[0] is not None and pos_estimated_cm[1] is not None:
+        pos_estimated_px = cm_to_px(pos_estimated_cm)
+        if (0 <= pos_estimated_px[0] < image.shape[1] and 
+            0 <= pos_estimated_px[1] < image.shape[0]):
+            cv2.circle(image_overlay, pos_estimated_px, 8, (255, 255, 0), 2)  # Cyan circle
+            cv2.drawMarker(image_overlay, pos_estimated_px, (255, 255, 0), 
+                          cv2.MARKER_CROSS, 12, 2)  # Cyan cross
+    
+    # Add legend
+    legend_y = 30
+    cv2.putText(image_overlay, "Legend:", (10, legend_y), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+    cv2.circle(image_overlay, (20, legend_y + 25), 5, (0, 255, 0), -1)
+    cv2.putText(image_overlay, "Start", (35, legend_y + 30), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.circle(image_overlay, (20, legend_y + 50), 5, (255, 0, 0), -1)
+    cv2.putText(image_overlay, "Goal", (35, legend_y + 55), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.circle(image_overlay, (20, legend_y + 75), 5, (0, 165, 255), -1)
+    cv2.putText(image_overlay, "Path", (35, legend_y + 80), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.drawMarker(image_overlay, (20, legend_y + 100), (0, 0, 255), 
+                   cv2.MARKER_CROSS, 8, 2)
+    cv2.putText(image_overlay, "Measured", (35, legend_y + 105), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    cv2.drawMarker(image_overlay, (20, legend_y + 125), (255, 255, 0), 
+                   cv2.MARKER_CROSS, 8, 2)
+    cv2.putText(image_overlay, "Estimated", (35, legend_y + 130), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    
+    return image_overlay
 
 def distance_directe(path: Iterable[Tuple[float, float]], degrees: bool = False) -> float:
     """
@@ -135,24 +186,17 @@ async def main():
     GOAL_EPS_CM = 2.0
     SKIP_STEPS =  3
 
-    try:
-        #gnav = global_nav.GlobalNavigation()
-        #path, explored, operation_count = gnav.grid_search()
-        #gnav.display_grid_with_path(path)
-        #gnav.display_colored_grid()
-        # if path:
-        #     print("A* path length =", len(path)-1, "\n", path)
-        #     print("length explored:", len(explored))
-        #     print("A* visualization")
-        # else:
-        #     print("No path found with A*")
-        
+    try:        
         # Initialize variables for path visualization
         current_path = None  # Vector of displacement vectors at each step
         current_image = None
         cm_per_pixel_global = None
     
-        mc = await Motion_control.create()
+        try:
+            mc = await Motion_control.create()
+        except:
+            print("Could not connect to Thymio")
+            return
         gnav = GlobalNavigation()
         step_count = 0
         current_path = None  # Will be filled with displacement vectors
@@ -166,6 +210,7 @@ async def main():
         while(1):
             if state == State.KIDNAPPING:
                 if just_changed_state:
+                    cv2.destroyAllWindows()#close all windows to "restart" properly
                     await mc.client.sleep(0.1)
                     #empty the camera buffer
                     for idx in range(50):
@@ -173,8 +218,7 @@ async def main():
                     just_changed_state = False
                     print("Kidnapped during path following")
                 x,_,_ = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
-                robot_detected = (x != None)
-                if robot_detected:
+                if x != None:
                     print("Robot detected after kidnapping")
                     await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
 
@@ -194,7 +238,11 @@ async def main():
                 v.overlay_grid_on_cropped()          # ouvre une fenêtre avec la superposition
 
                 gnav.set_gnav(v)
-                current_path, explored, opertation_count = gnav.grid_search()
+                current_path, explored = gnav.grid_search()
+
+                if (current_path == None) : 
+                    print("No path found, obstacles probably to close")
+                    break
 
                 frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
@@ -202,8 +250,8 @@ async def main():
                 update_filtering(mc)
 
                 gnav.display_grid_with_path(current_path)
-                gnav.display_grid_with_path([(10,10)])
                 gnav.display_colored_grid()
+                
                 print("A* path length =", len(current_path)-1, "\n", current_path)
 
                 # gnav -> find the array of vectors (deplacement at step k)
@@ -227,7 +275,6 @@ async def main():
                     print("image size:", current_image.shape)
                 
                 if current_image is not None:
-                    # Plot the image with the paths (displacement vectors)
                     # Get start position (cm), scale (pixels/cm) and start orientation (radians)
                     x_cm, y_cm, cm_to_pixel, _ = v.get_start_pos_and_cm_to_pixel(current_image)  
 
@@ -239,8 +286,6 @@ async def main():
                             start_pos = np.zeros(2)
                         else:
                             start_pos = np.array([x_cm, y_cm])
-
-                        image_with_path = plot_path_on_image(current_image, vector_path_inversed, start_pos, cm_to_pixel)
             
                 # save scale (pixels per cm) for later conversions
                 cm_to_pixel_global = cm_to_pixel
@@ -270,9 +315,26 @@ async def main():
                 frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
+
+                #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
+                #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
+                if pos_robot_vision[0] is None:#if kidnapped and it hides the aruco marker
+                    print("Kidnapped during path following (due to no robot detection)")
+                    state = State.KIDNAPPING
+                    await mc.node.set_variables(mc.motors(0, 0))#stop the motors
+                    just_changed_state = True
+                    continue
+
                 pos_robot_est = pos_est[0], pos_est[1]
                 #pos_robot_est = pos_robot_vision
                 print(f"POS VISION = {pos_robot_vision}; POS EST = {pos_robot_est}")
+                
+                # Display real-time visualization
+                pos_estimated_test = (10, 10)  # Position de test à remplacer plus tard
+                realtime_image = visualize_realtime(frame, vector_path_inversed, start_pos, 
+                                                    cm_to_pixel_global, pos_robot_vision, pos_estimated_test)
+                cv2.imshow("Real-time Navigation View", realtime_image)
+                cv2.waitKey(1)  # Afficher pendant 1ms pour permettre la mise à jour
 
                 if abs(np.subtract(pos_robot_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_robot_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
                     print(f"Robot at {pos_robot_est} and goal is {pos_to_goal[-1]}")
@@ -318,7 +380,8 @@ async def main():
             if state == State.GOAL_REACHED:
                 print(f"Goal reached")
                 await mc.node.set_variables(mc.motors(0, 0))
-                return
+                cv2.destroyAllWindows()  # Fermer toutes les fenêtres OpenCV
+                break
 
                 # #Wait finish signal
                 # cv2.waitKey(0)
@@ -326,6 +389,7 @@ async def main():
                 # break
 
     finally:
+        cv2.destroyAllWindows()  # Assurez que les fenêtres sont fermées
         await mc.close()
 
 def update_filtering(mc):
@@ -342,4 +406,7 @@ def update_filtering(mc):
     pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except:
+        print("Program finished")

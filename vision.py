@@ -1,8 +1,6 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import time #to see if too slow (can be deleted)
-
 
 '''
 
@@ -118,9 +116,9 @@ class Vision:
             raise Exception("Unable to capture the image")
 
         if plot:
-            # Display the image
+            #Display the image
             cv2.imshow("Captured image", frame)
-            # Attend une touche puis ferme
+            #Wait for a key press then close
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
@@ -130,17 +128,15 @@ class Vision:
         frame = cv2.bilateralFilter(frame, d=9, sigmaColor=75, sigmaSpace=75) #filtering
 
         if plot:
-            # Display the image
+            #Display the image
             cv2.imshow("Filtered image", frame)
-            # Attend une touche puis ferme
+            #Wait for a key press then close
             cv2.waitKey(0)
             cv2.destroyAllWindows()
-            print(frame.shape)
+            print("frame.shape:", frame.shape)
 
         return frame
-
-    import time
-
+    
     '''
     Used to setup the camera -> if space key pressed -> exit the loop
     '''
@@ -151,12 +147,12 @@ class Vision:
 
             key = cv2.waitKey(0)
 
-            if key == 32:  # 32 = code ASCII de la barre d'espace
+            if key == 32:  #32 = ASCII code for space key
                 break 
 
         cv2.destroyAllWindows()
 
-    def plot_grid(self):
+    def plot_grid(self,half_size=0):
         print(f"Grid sizeY = {self.grid.shape[0]}, grid sizeX = {self.grid.shape[1]}")
         #Reconstruction to visualize the grid
         image_cropped = np.zeros((self.grid.shape[0], self.grid.shape[1], 3), dtype=np.uint8)
@@ -164,23 +160,22 @@ class Vision:
         for i in range(self.grid.shape[0]):
             for j in range(self.grid.shape[1]):
                 if self.grid[i, j] == 0:
-                    image_cropped[i, j] = [0, 0, 0]        # noir
+                    image_cropped[i, j] = [0, 0, 0]        #black
                 elif self.grid[i, j] == 1:
-                    image_cropped[i, j] = [255, 255, 255]  # blanc
+                    image_cropped[i, j] = [255, 255, 255]  #white
                 else:
-                    image_cropped[i, j] = [255, 0, 0]      # red if unknown
+                    image_cropped[i, j] = [255, 0, 0]      #red if unknown
         
-        # Do a big square on goal/start
-        half_size=2
+        #Do a square on goal/start
         for dy in range(-half_size, half_size + 1):
             for dx in range(-half_size, half_size + 1):
-                # Since positions are [row, col] -> row == y, col == x
+                #Since positions are [row, col] -> row == y, col == x
                 ny = int(self.thymio_pos[0]) + dy
                 nx = int(self.thymio_pos[1]) + dx
                 ny2 = int(self.goal[0]) + dy
                 nx2 = int(self.goal[1]) + dx
 
-                # Vérifie que l'on reste dans les limites de l'image
+                #Check that we stay within image bounds
                 if 0 <= ny < image_cropped.shape[0] and 0 <= nx < image_cropped.shape[1]:
                     image_cropped[ny, nx] = [0, 255, 0]  # green (start)
                 if 0 <= ny2 < image_cropped.shape[0] and 0 <= nx2 < image_cropped.shape[1]:
@@ -216,7 +211,7 @@ class Vision:
 
         if plot:
             cv2.imshow("Aruco cropped", frame_cropped)
-            #Attend une touche puis ferme
+            #Wait for a key press then close
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
@@ -225,42 +220,42 @@ class Vision:
         grid_Ny, grid_Nx = self.grid.shape
         height, width = frame_cropped.shape[:2]
 
-        # Remap start/end in the grid
+        #Remap start/end in the grid
         start_end_grid = []
         i = 0
         for pt in self.__goal_end:
             i += 1
             x_grid = int(pt[0] * grid_Nx)#(normalization already done in aruco cutting)
             y_grid = int(pt[1] * grid_Ny)
-            # Clamp indices
+            #Clamp indices
             x_grid = min(max(x_grid, 0), grid_Nx-1)
             y_grid = min(max(y_grid, 0), grid_Ny-1)
 
             if i==1:
-                # Store positions in (row, col) == (y, x) to match numpy indexing
+                #Store positions in (row, col) == (y, x) to match numpy indexing
                 self.thymio_pos = [y_grid, x_grid]
             elif i==2:
-                # Store positions in (row, col) == (y, x)
+                #Store positions in (row, col) == (y, x)
                 self.goal = [y_grid, x_grid]
         
 
     '''
     Detect the Arucos and crop the frame by creating a rectangle with the center of the Arucos being the corners
     '''
-    # Function de https://www.geeksforgeeks.org/computer-vision/detecting-aruco-markers-with-opencv-and-python-1/
+    #Function de https://www.geeksforgeeks.org/computer-vision/detecting-aruco-markers-with-opencv-and-python-1/
     def get_frame_from_aruco(self,frame,plot=False):
 
-        # Convert the image to grayscale
+        #Convert the image to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         parameters = cv2.aruco.DetectorParameters()
 
-        # Create the ArUco detector
+        #Create the ArUco detector
         detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
-        # Detect the markers
+        #Detect the markers
         corners, ids, rejected = detector.detectMarkers(gray)
         if plot:
-            # Print the detected markers
+            #Print the detected markers
             print("Detected markers:", ids)
             print("Corners:", corners)
             frame_aruco = frame.copy()
@@ -276,12 +271,10 @@ class Vision:
 
         centers_2pts=np.zeros((2,2))
         id_to_idx = {0: 0, 2: 1} #since i can go to n (n being number of arucos)
-        #aruco_margin_factor = 0.1 #how much size of the Aruco do we want to add ?
-        aruco_margin_factor = 1 #how much size of the Aruco do we want to add ?
         for c, i in zip(corners, ids):
             pts = c[0]  # shape (4,2)
 
-            # Distance between top-left and top-right corners
+            #Distance between top-left and top-right corners
             pixel_width = np.linalg.norm(pts[0] - pts[1])
             pixel_height = np.linalg.norm(pts[1] - pts[2])
             aruco_pixel_sizes.append((pixel_width + pixel_height) / 2)
@@ -290,10 +283,10 @@ class Vision:
                 center = c[0].mean(axis=0)
                 centers_2pts[id_to_idx[int(i)]] = center
 
-        # Average pixel size of all detected ArUcos
+        #Average pixel size of all detected ArUcos
         aruco_pixel_size_before = np.mean(aruco_pixel_sizes)
 
-        # Conversion ratio
+        #Conversion ratio
         self.__cm_per_pixel_before = self._aruco_real_size_cm/aruco_pixel_size_before
 
         top_right = [centers_2pts[0][0],centers_2pts[1][1]]
@@ -344,10 +337,11 @@ class Vision:
         if aruco_pixel_size_after > 0:
             self.__cm_per_pixel_after = self._aruco_real_size_cm / aruco_pixel_size_after
         else:
-            # Fallback to before if after-detection failed
+            #Fallback to before if after-detection failed
             self.__cm_per_pixel_after = self.__cm_per_pixel_before
 
-        aruco_margin_factor = 2.5
+        #Replace the arucos for start and goal by white to avoid confusion during grid creation
+        aruco_margin_factor = 2.5 #How much size of the Aruco do we want to add ?
         for c, i in zip(corners_after, ids_after):
             if i in [1, 3]:
                 pts = c[0]
@@ -392,7 +386,7 @@ class Vision:
     '''
     Get a cropped frame from the arucos. Either recalculate the cropping parameters or use the previous ones
     CAUTION: If the recalculation is done -> the arucos will be replaced by white in the image (done in get_frame_from_aruco to avoid confusion during grid creation)
-    Remark: if the camera or the setup moved, it is better to recalculate the cropping parameters
+    Remark: if the camera or the setup moved, it is better to recalculate the cropping parameters -> small change in code needed if you want it cleaner
     '''
     def get_cutted_frame(self,plot=False,resample=False):
         if self._M is None or self._w is None or self._h is None or resample:
@@ -412,14 +406,7 @@ class Vision:
 
     def overlay_grid_on_cropped(self, frame=None, show=True, line_color=(0,255,0), start_color=(0,255,0), goal_color=(255,0,0)):
         """
-        Superpose la grille calculée (`self.grid`) sur une image recadrée (celle utilisée pour
-        la création de la grille). Retourne l'image annotée.
-
-        - frame: image BGR à utiliser. Si None, récupère l'image recadrée actuelle via `get_cutted_frame`.
-        - show: si True, affiche la fenêtre OpenCV et attend une touche.
-        - line_color/start_color/goal_color: BGR tuples pour les couleurs.
-
-        Retourne l'image annotée (numpy array) ou None si la grille n'existe pas.
+        Superpose the grid on the cropped image.
         """
         if self.grid is None:
             print("No grid available to overlay. Run vision() first.")
@@ -435,11 +422,11 @@ class Vision:
         grid_Ny, grid_Nx = self.grid.shape
         h, w = img.shape[:2]
 
-        # Floating cell sizes (precise)
+        #Cell size
         cell_w_f = float(w) / float(grid_Nx)
         cell_h_f = float(h) / float(grid_Ny)
 
-        # Draw grid lines
+        #Draw grid lines
         for j in range(grid_Nx + 1):
             x = int(round(j * cell_w_f))
             cv2.line(img, (x, 0), (x, h), line_color, 1)
@@ -447,7 +434,7 @@ class Vision:
             y = int(round(i * cell_h_f))
             cv2.line(img, (0, y), (w, y), line_color, 1)
 
-        # Mark start and goal cell centers if available (self.thymio_pos and self.goal are [row, col])
+        #Mark start and goal cell centers if available (self.thymio_pos and self.goal are [row, col])
         try:
             if getattr(self, 'thymio_pos', None) is not None:
                 row, col = int(self.thymio_pos[0]), int(self.thymio_pos[1])
@@ -479,17 +466,19 @@ class Vision:
 
     P: it creates a square grid with cell size P (in pixels)
     '''
-    def get_grid(self,grid_Nx,grid_Ny,frame,white_th,P):
+    def get_grid(self,grid_Nx,grid_Ny,frame,white_th,P,plot=False):
         height, width, _ = frame.shape
 
         #Default case
         if grid_Nx == 0 or grid_Ny == 0 or P > 0:
             if P > 0:
-                print("square case in grid creation")
+                if plot:
+                    print("square case in grid creation")
                 grid_Nx = int(width  / P)
                 grid_Ny = int(height / P)
             else:
-                print("Default case in grid creation")
+                if plot:
+                    print("Default case in grid creation")
                 grid_Nx = width
                 grid_Ny = height
 
@@ -507,18 +496,19 @@ class Vision:
         cell_h_cm = cell_h_f * self.__cm_per_pixel_after
         self.cell_size = (cell_w_cm + cell_h_cm) / 2.0 #average (in cm)
 
-        print(f"=== DEBUG cm_per_pixel ===")
-        print(f"BEFORE crop: {self.__cm_per_pixel_before:.6f} cm/px")
-        print(f"AFTER crop:  {self.__cm_per_pixel_after:.6f} cm/px")
-        print(f"Ratio after/before: {self.__cm_per_pixel_after/self.__cm_per_pixel_before:.3f}")
-        print(f"cell_size: {self.cell_size:.3f} cm")
+        if plot:
+            print(f"=== DEBUG cm_per_pixel ===")
+            print(f"BEFORE crop: {self.__cm_per_pixel_before:.6f} cm/px")
+            print(f"AFTER crop:  {self.__cm_per_pixel_after:.6f} cm/px")
+            print(f"Ratio after/before: {self.__cm_per_pixel_after/self.__cm_per_pixel_before:.3f}")
+            print(f"cell_size: {self.cell_size:.3f} cm")
 
         grid = np.zeros((grid_Ny, grid_Nx), dtype=int)
 
         #Convert to grayscale for grid processing
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        #grid processing
+        #Grid processing
         for i in range(grid_Ny):
             for j in range(grid_Nx):
                 #Compute integer bounds from the floating cell size (rounding limits)
@@ -536,7 +526,7 @@ class Vision:
                 #Extract cell
                 cell = gray[y0:y1, x0:x1]
 
-                #Avoid empty cell warning
+                #Avoid empty cell
                 if cell.size == 0:
                     grid[i, j] = 0
                     continue
@@ -546,7 +536,7 @@ class Vision:
                 else:
                     grid[i, j] = 0   #wall
 
-        #dilate walls only (add safety margin) (permits to tune if bad lightning when using)
+        #Dilate walls (add safety margin) (permits to tune if bad lightning when using)
         if self.wall_dilation > 0:
             #Invert grid: walls become 1, roads become 0
             inv_grid = 1 - grid
@@ -563,7 +553,7 @@ class Vision:
         return grid
 
     '''
-    This function detects the thymio and get its position with the (0,0) at the bottom left aruco
+    This function detects the thymio and get its position and orientation
     Detects aruco id 1 and returns its center position and orientation based on the aruco corners
     '''
     def get_thymio_pos(self, frame):
@@ -623,19 +613,16 @@ class Vision:
 
         #Convert pixel position to cm using the scale after cropping
         x_cm = x_px * self.__cm_per_pixel_after
-        # Invert y-axis to have origin at bottom-left instead of top-left
+        #Invert y-axis to have origin at bottom-left instead of top-left
         y_cm = (frame.shape[0] - y_px) * self.__cm_per_pixel_after
-        
-        # Invert theta angle because y-axis is flipped (pixel coords: y down, cm coords: y up)
-        #theta_cm = -theta
 
         return x_cm, y_cm, theta
     
+    '''
+    Detecte l'ArUco d'id 1 (start) dans l'image fournie et renvoie la position
+    de départ en centimètres ainsi que le facteur `pixels par cm` (cm_to_pixel).
+    '''
     def calculate_cm_to_pixel(self,frame):
-        """
-        Detecte l'ArUco d'id 1 (start) dans l'image fournie et renvoie la position
-        de départ en centimètres ainsi que le facteur `pixels par cm` (cm_to_pixel).
-        """
         #Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
@@ -647,66 +634,36 @@ class Vision:
         cm_to_pixel = None
 
         if ids is None:
-            print("No aruco markers detected in frame in get_start_pos_and_cm_per_pixel")
-            return None, None, None, None
+            print("No aruco markers detected in frame in calculate_cm_to_pixel")
+            return None
+        #Compute mean pixel size of detected ArUco to get scale
+        aruco_pixel_sizes = []
+        for c, i in zip(corners, ids):
+            pts = c[0]
+            pixel_width = np.linalg.norm(pts[0] - pts[1])
+            pixel_height = np.linalg.norm(pts[1] - pts[2])
+            aruco_pixel_sizes.append((pixel_width + pixel_height) / 2)
 
-        else:
-            #Compute mean pixel size of detected ArUco to get scale
-            aruco_pixel_sizes = []
-            for c, i in zip(corners, ids):
-                pts = c[0]
-                pixel_width = np.linalg.norm(pts[0] - pts[1])
-                pixel_height = np.linalg.norm(pts[1] - pts[2])
-                aruco_pixel_sizes.append((pixel_width + pixel_height) / 2)
+        if len(aruco_pixel_sizes) > 0:
+            mean_pixels = np.mean(aruco_pixel_sizes)
+            if mean_pixels > 0:
+                #Pixels per cm
+                cm_to_pixel = mean_pixels / self._aruco_real_size_cm
+                #Store inverse if useful elsewhere
+                self.__cm_per_pixel_after = self._aruco_real_size_cm / mean_pixels
 
-            if len(aruco_pixel_sizes) > 0:
-                mean_pixels = np.mean(aruco_pixel_sizes)
-                if mean_pixels > 0:
-                    # pixels per cm
-                    cm_to_pixel = mean_pixels / self._aruco_real_size_cm
-                    # store inverse if useful elsewhere
-                    self.__cm_per_pixel_after = self._aruco_real_size_cm / mean_pixels
+        #If we still don't have cm_to_pixel, try cached value
+        if cm_to_pixel is None and self.__cm_per_pixel_after is not None:
+            print("Scale cm_to_pixel not computed from detected markers, trying cached value")
+            cm_to_pixel = 1.0 / self.__cm_per_pixel_after
 
-        # Now try to find id 1 and compute its position in cm with origin at bottom-left
-        if ids is not None:
-            for idx, marker_id in enumerate(ids):
-                if marker_id[0] == 1:
-                    pts = corners[idx][0]
-                    center_px = pts.mean(axis=0)
-                    x_px = float(center_px[0])
-                    y_px_top = float(center_px[1])
+        return cm_to_pixel
 
-                    # If we still don't have cm_to_pixel, try cached value
-                    if cm_to_pixel is None:
-                        print("Scale cm_to_pixel not computed from detected markers, trying cached value")
-                        if getattr(self, '_Vision__cm_per_pixel_after', None) is not None and self._Vision__cm_per_pixel_after > 0:
-                            cm_to_pixel = 1.0 / self._Vision__cm_per_pixel_after
-                        else:
-                            print("Scale unavailable to convert pixels to cm")
-                            return None, None, None
-
-                    # Convert pixels to cm. x: left->right, y: bottom->top
-                    x_cm = x_px / cm_to_pixel
-                    y_cm = (frame.shape[0] - y_px_top) / cm_to_pixel
-
-                    # Compute orientation of the marker (center -> top-right)
-                    top_right = pts[1]
-                    dx = top_right[0] - center_px[0]
-                    dy = top_right[1] - center_px[1]
-                    orientation = np.arctan2(dy, dx)  # radians
-
-                    return x_cm, y_cm, cm_to_pixel, orientation
-
-        #If we reach here, id 1 not detected
-        print("Aruco id 1 (start) not detected in frame")
-        #Return None for position and orientation but cm_to_pixel if available
-        return None, None, cm_to_pixel, None
-
+    '''
+    Detects the ArUco with ID 1 (start) in the provided image and returns the
+    starting position in centimetres as well as the pixels per cm factor (cm_to_pixel).
+    '''
     def get_start_pos_and_cm_to_pixel(self, frame):
-        """
-        Detecte l'ArUco d'id 1 (start) dans l'image fournie et renvoie la position
-        de départ en centimètres ainsi que le facteur `pixels par cm` (cm_to_pixel).
-        """
         #Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
@@ -738,7 +695,7 @@ class Vision:
                     # store inverse if useful elsewhere
                     self.__cm_per_pixel_after = self._aruco_real_size_cm / mean_pixels
 
-        # Now try to find id 1 and compute its position in cm with origin at bottom-left
+        #Now try to find id 1 and compute its position in cm with origin at bottom-left
         if ids is not None:
             for idx, marker_id in enumerate(ids):
                 if marker_id[0] == 1:
@@ -747,7 +704,7 @@ class Vision:
                     x_px = float(center_px[0])
                     y_px_top = float(center_px[1])
 
-                    # If we still don't have cm_to_pixel, try cached value
+                    #If we still don't have cm_to_pixel, try cached value
                     if cm_to_pixel is None:
                         print("Scale cm_to_pixel not computed from detected markers, trying cached value")
                         if getattr(self, '_Vision__cm_per_pixel_after', None) is not None and self._Vision__cm_per_pixel_after > 0:
@@ -756,11 +713,11 @@ class Vision:
                             print("Scale unavailable to convert pixels to cm")
                             return None, None, None
 
-                    # Convert pixels to cm. x: left->right, y: bottom->top
+                    #Convert pixels to cm. x: left->right, y: bottom->top
                     x_cm = x_px / cm_to_pixel
                     y_cm = (frame.shape[0] - y_px_top) / cm_to_pixel
 
-                    # Compute orientation of the marker (center -> top-right)
+                    #Compute orientation of the marker (center -> top-right)
                     top_right = pts[1]
                     dx = top_right[0] - center_px[0]
                     dy = top_right[1] - center_px[1]
