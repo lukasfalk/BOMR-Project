@@ -187,7 +187,7 @@ async def main():
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
-                v.vision(5,60,False,5)  #acquisition delay, white threshold, plot, P (pixels per cell)
+                v.vision(5,60,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
                 v.plot_grid()
 
                 # si v est une instance de Vision et que v.vision(...) a été appelé

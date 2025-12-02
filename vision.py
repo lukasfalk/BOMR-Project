@@ -34,7 +34,10 @@ class Vision:
         self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
 
         #Doesn't allow automatic rotations
-        self.__cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 0)    
+        self.__cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 0)   
+
+        # Essayer de forcer une orientation spécifique (en degrés)
+        self.__cap.set(cv2.CAP_PROP_ORIENTATION_META, 0)  # ou 90, 180, 270 
 
         #Take the calibration data if it exists
         try:

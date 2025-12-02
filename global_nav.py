@@ -58,7 +58,7 @@ class GlobalNavigation :
         self.Goal = row, col
         self.grid = vision.grid
         self.cell_size = vision.cell_size
-        self.thymio_size = 10
+        self.thymio_size = 16
 
         #Adapt thymio size for grid
         self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
