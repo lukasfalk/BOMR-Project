@@ -100,7 +100,7 @@ class Vision:
 
     The frame is a table: (length_x, length_y, 3)
     '''
-    def get_image(self,cap,plot):
+    def get_image(self,cap,plot=False):
 
         # Read one frame
         ret, frame = cap.read()
@@ -245,7 +245,7 @@ class Vision:
     Detect the Arucos and crop the frame by creating a rectangle with the center of the Arucos being the corners
     '''
     # Function de https://www.geeksforgeeks.org/computer-vision/detecting-aruco-markers-with-opencv-and-python-1/
-    def get_frame_from_aruco(self,frame) : 
+    def get_frame_from_aruco(self,frame,plot=False):
 
         # Convert the image to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -256,15 +256,16 @@ class Vision:
         detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
         # Detect the markers
         corners, ids, rejected = detector.detectMarkers(gray)
-        # Print the detected markers
-        print("Detected markers:", ids)
-        print("Corners:", corners)
-        frame_aruco = frame.copy()
-        if ids is not None:
-            cv2.aruco.drawDetectedMarkers(frame_aruco, corners, ids)
-            cv2.imshow('Detected Markers', frame_aruco)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+        if plot:
+            # Print the detected markers
+            print("Detected markers:", ids)
+            print("Corners:", corners)
+            frame_aruco = frame.copy()
+            if ids is not None:
+                cv2.aruco.drawDetectedMarkers(frame_aruco, corners, ids)
+                cv2.imshow('Detected Markers', frame_aruco)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
 
         #id 0 is top left and id 2 is bottom right
         #Detection of the "box" + calculation of the cell size        
@@ -390,7 +391,7 @@ class Vision:
     CAUTION: If the recalculation is done -> the arucos will be replaced by white in the image (done in get_frame_from_aruco to avoid confusion during grid creation)
     Remark: if the camera or the setup moved, it is better to recalculate the cropping parameters
     '''
-    def get_cutted_frame(self,plot,resample=False):
+    def get_cutted_frame(self,plot=False,resample=False):
         if self._M is None or self._w is None or self._h is None or resample:
             # First time setup
             if plot:
@@ -619,11 +620,15 @@ class Vision:
 
         #Convert pixel position to cm using the scale after cropping
         x_cm = x_px * self.__cm_per_pixel_after
-        y_cm = y_px * self.__cm_per_pixel_after
+        # Invert y-axis to have origin at bottom-left instead of top-left
+        y_cm = (frame.shape[0] - y_px) * self.__cm_per_pixel_after
+        
+        # Invert theta angle because y-axis is flipped (pixel coords: y down, cm coords: y up)
+        #theta_cm = -theta
 
         return x_cm, y_cm, theta
     
-    def get_cm_to_pixel(self,frame):
+    def calculate_cm_to_pixel(self,frame):
         """
         Detecte l'ArUco d'id 1 (start) dans l'image fournie et renvoie la position
         de départ en centimètres ainsi que le facteur `pixels par cm` (cm_to_pixel).

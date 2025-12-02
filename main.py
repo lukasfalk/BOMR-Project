@@ -187,7 +187,7 @@ async def main():
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
-                v.vision(5,80,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
+                v.vision(5,60,False,5)  #acquisition delay, white threshold, plot, P (pixels per cell)
                 v.plot_grid()
 
                 # si v est une instance de Vision et que v.vision(...) a été appelé
@@ -199,6 +199,7 @@ async def main():
                 update_filtering(mc)
 
                 gnav.display_grid_with_path(current_path)
+                gnav.display_grid_with_path([(10,10)])
                 gnav.display_colored_grid()
                 print("A* path length =", len(current_path)-1, "\n", current_path)
 
@@ -215,7 +216,7 @@ async def main():
                 vector_path_inversed = [] #in case of kidnapping we do not want the paths to adds up
                 for idx in range(len(vector_path)):
                     norm, angle = vector_path[idx]
-                    vector_path_inversed.append((norm,-1*angle))  #invert angle to have the right orientation (vision has y inverted compared to robot frame)
+                    vector_path_inversed.append((norm, -angle))  # angles already in correct reference frame
 
                 if vector_path is not None:
                     #current_image = v.get_image(v._Vision__cap, False)
@@ -225,7 +226,7 @@ async def main():
                 if current_image is not None:
                     # Plot the image with the paths (displacement vectors)
                     # Get start position (cm), scale (pixels/cm) and start orientation (radians)
-                    x_cm, y_cm, cm_to_pixel, start_orientation = v.get_start_pos_and_cm_to_pixel(current_image)
+                    x_cm, y_cm, cm_to_pixel, _ = v.get_start_pos_and_cm_to_pixel(current_image)  
 
                     if cm_to_pixel is None:
                         print("Scale unavailable: skipping path plotting")
@@ -235,17 +236,6 @@ async def main():
                             start_pos = np.zeros(2)
                         else:
                             start_pos = np.array([x_cm, y_cm])
-
-                        # Apply orientation bias: make all angles relative to the aruco horizontal
-                        if start_orientation is None:
-                            start_orientation = 0.0
-                        
-                        start_orientation = 0.0
-
-                        vector_path_biased = []
-                        for norm, angle in vector_path:
-                            biased_angle = angle - start_orientation
-                            vector_path_biased.append((norm, biased_angle))
 
                         image_with_path = plot_path_on_image(current_image, vector_path_inversed, start_pos, cm_to_pixel)
             
@@ -274,53 +264,53 @@ async def main():
                 #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
 
                 update_filtering(mc)
-                frame = v.get_image(v._Vision__cap, False)
-                frame = v.get_image(v._Vision__cap, False)
+                frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
                 #pos_robot_est = pos_est[0], pos_est[1]
                 pos_robot_est = pos_robot_vision
                 print(f"POS VISION = {pos_robot_vision}; POS EST = {pos_robot_est}")
 
-                # if abs(np.subtract(pos_robot_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_robot_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
-                #     print(f"Robot at {pos_robot_est} and goal is {pos_to_goal[-1]}")
-                #     state = State.GOAL_REACHED
+                if abs(np.subtract(pos_robot_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_robot_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
+                    print(f"Robot at {pos_robot_est} and goal is {pos_to_goal[-1]}")
+                    state = State.GOAL_REACHED
                     
-                # elif step_count < len(pos_to_goal):
+                elif step_count < len(pos_to_goal):
 
-                #     if state == State.OBS_AVOIDED:
-                #         step_count += SKIP_STEPS
-                #         state = State.GLOBAL_NAVIGATION
+                    if state == State.OBS_AVOIDED:
+                        step_count += SKIP_STEPS
+                        state = State.GLOBAL_NAVIGATION
 
-                #     elif target_pos is not None:
-                #         error_pos = np.linalg.norm(target_pos) - np.linalg.norm(pos_robot_est)
-                #     print(f"Error pos = {error_pos} \n")
+                    elif target_pos is not None:
+                        error_pos = np.linalg.norm(target_pos) - np.linalg.norm(pos_robot_est)
+                    print(f"Error pos = {error_pos} \n")
 
-                #     target_pos = pos_to_goal[step_count]
+                    target_pos = pos_to_goal[step_count]
 
-                #     # If robot closer to goal than next step => go one step further
-                #     #print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist target-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
-                #     while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_robot_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
-                #         if step_count + 1 >= len(pos_to_goal):
-                #             print("overflow pos_to_goal")
-                #             break
-                #         else:
-                #             step_count += 1
-                #             target_pos = pos_to_goal[step_count]
-                #             print(f"Skip step {step_count - 1}")
+                    # If robot closer to goal than next step => go one step further
+                    #print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist target-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
+                    while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_robot_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
+                        if step_count + 1 >= len(pos_to_goal):
+                            print("overflow pos_to_goal")
+                            break
+                        else:
+                            step_count += 1
+                            target_pos = pos_to_goal[step_count]
+                            print(f"Skip step {step_count - 1}")
 
-                #     dx = target_pos[0] - pos_robot_est[0]
-                #     dy = target_pos[1] - pos_robot_est[1]
-                #     norm = np.linalg.norm([dx, dy])
-                #     angle = -np.atan2(dy, dx)
-                #     next_step = (norm, angle)
-                #     step_count += 1
+                    dx = target_pos[0] - pos_robot_est[0]
+                    dy = target_pos[1] - pos_robot_est[1]
+                    norm = np.linalg.norm([dx, dy])
+                    angle = -np.atan2(dy, dx)
+                    next_step = (norm, angle)
+                    step_count += 1
 
-                #     print(f"Robot at {pos_robot_est} and going to {target_pos}")
-                #     print(f"Step {step_count-1} (norm, angle): {next_step}")
-                #     state = await mc.fsm(next_step, v, error_pos, state)
+                    print(f"Robot at {pos_robot_est} and going to {target_pos}")
+                    print(f"Step {step_count-1} (norm, angle): {next_step}")
+                    state = await mc.fsm(next_step, v, error_pos, state)
 
-                # elif state != State.GOAL_REACHED: # try to reach again the goal
-                #     step_count -= 1
+                elif state != State.GOAL_REACHED: # try to reach again the goal
+                    step_count -= 1
 
             if state == State.GOAL_REACHED:
                 print(f"Goal reached")
