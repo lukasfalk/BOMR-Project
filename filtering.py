@@ -6,25 +6,26 @@ from typing import Tuple
 
 class Filtering : 
 
-
     def __init__(self): 
 
         # Robot parameters
         self.Ts = 0.01  # Sample time
-        self.interwheel_distance = 0.11 # [m] Distance between the wheels
+        self.interwheel_distance = 11 # [cm] Distance between the wheels
         # Q = np.diag([10, 10, 10])  # Process noise covariance
         
+        self.thymio_speed_to_ms = 0.3846153846153846 / 1 # m/s conversion factor
+
         # Noise
         self.var_v_left = 2.853437746116455
         self.var_v_right = 5.5411623536575645
         self.Q = np.diag([self.var_v_left**2, self.var_v_right**2, 10]) # Process noise covariance
-        self.R = np.diag([0.05**2, 0.05**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
+        self.R = np.diag([0.00001**2, 0.00001**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
 
         self.x_est = np.zeros(3) #Initial estimation for states
         self.x_pred = None 
         self.x_prev = None
 
-        self.P_est = np.diag([1e-3, 1e-3, 1e-3])  # Initial estimation covariance
+        self.P_est = np.diag([1e-5, 1e-5, 1e-5])  # Initial estimation covariance
         self.P_pred = None
         self.P_prev = None
         self.omega = None 
@@ -55,7 +56,6 @@ class Filtering :
                         self.wrap_angle(self.x_prev[2] + self.omega * self.Ts)])
 
         F = self.state_transition_jacobian()
-
         self.P_pred = F @ self.P_prev @ F.T + self.Q
 
     def update_state_est(self, z: np.ndarray):
@@ -67,7 +67,7 @@ class Filtering :
         self.x_est = self.x_pred + K @ inno
         self.P_est = (np.eye(3) - K @ H) @ self.P_pred
 
-    def extended_kalman_filter(self, x_est: np.ndarray, P_est: np.ndarray, 
+    def extended_kalman_filter(self, given_x_est: np.ndarray, given_P_est: np.ndarray, 
                                left_speed: float, right_speed: float,
                                z: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         '''
@@ -76,8 +76,15 @@ class Filtering :
             the current left and right wheel speeds,
             and returns the updated state estimate and covariance.
         '''
-        self.x_prev = x_est
-        self.P_prev = P_est
+
+        self.x_est = given_x_est
+        self.P_est = given_P_est
+
+        left_speed *= self.thymio_speed_to_ms
+        right_speed *= self.thymio_speed_to_ms
+
+        self.x_prev = self.x_est
+        self.P_prev = self.P_est
 
         
         self.v     = (left_speed  + right_speed) / 2 # Average speed
@@ -93,8 +100,10 @@ class Filtering :
             # No measurement update. Estimated states are the predicted states
             self.x_est = self.x_pred
             self.P_est = self.P_pred
-        
-        return self.x_est, self.P_est, self.x_pred
+
+        given_x_est = self.x_est
+
+        return given_x_est, self.P_est, self.x_pred
 
     # pos_odo = []
     # pos_filt = []
