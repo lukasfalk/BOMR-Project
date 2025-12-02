@@ -196,6 +196,9 @@ async def main():
                 gnav.set_gnav(v)
                 current_path, explored, opertation_count = gnav.grid_search()
 
+                frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                frame = v.get_cutted_frame(False, False)
+                pos_est = v.get_thymio_pos_in_cm(frame)[:2]
                 update_filtering(mc)
 
                 gnav.display_grid_with_path(current_path)
@@ -267,8 +270,8 @@ async def main():
                 frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
-                #pos_robot_est = pos_est[0], pos_est[1]
-                pos_robot_est = pos_robot_vision
+                pos_robot_est = pos_est[0], pos_est[1]
+                #pos_robot_est = pos_robot_vision
                 print(f"POS VISION = {pos_robot_vision}; POS EST = {pos_robot_est}")
 
                 if abs(np.subtract(pos_robot_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_robot_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
@@ -283,7 +286,7 @@ async def main():
 
                     elif target_pos is not None:
                         error_pos = np.linalg.norm(target_pos) - np.linalg.norm(pos_robot_est)
-                    print(f"Error pos = {error_pos} \n")
+                    #print(f"Error pos = {error_pos} \n")
 
                     target_pos = pos_to_goal[step_count]
 
@@ -330,10 +333,11 @@ def update_filtering(mc):
     frame = v.get_image(v._Vision__cap, False)
     frame = v.get_image(v._Vision__cap, False)
     pos_vision = (None, None)
-    pos_vision = v.get_thymio_pos_in_cm(frame)
-
+    #pos_vision = v.get_thymio_pos_in_cm(frame)
+    print("Prcessing vision")
     l = mc.node["motor.left.speed"]
     r = mc.node["motor.right.speed"]
+    print(f"Left speed = {l}; Right speed = {r}")
 
     pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
 
