@@ -236,7 +236,7 @@ async def main():
 
                 # si v est une instance de Vision et que v.vision(...) a été appelé
                 v.overlay_grid_on_cropped()          # ouvre une fenêtre avec la superposition
-
+                
                 gnav.set_gnav(v)
                 current_path, explored = gnav.grid_search()
 
