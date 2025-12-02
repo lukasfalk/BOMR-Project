@@ -19,37 +19,6 @@ class GlobalNavigation :
         self.robot_size = None
         self.robot_size_cells = None
 
-        # '''
-        # Testing zone 
-        # '''
-        # # Testing zone: Generate a large grid for testing
-        # self.grid = np.ones((10, 10), dtype=int)  # Create a 20x20 grid filled with zeros
-        # self.Start = (0, 0)  # Top-left corner
-        # self.Goal = (9, 9)  # Bottom-right corner
-
-        # self.thymio_size = 1.5  # Taille maximale du robot (en unités réelles)
-        # self.cell_size = 1  # Taille d'une cellule (en unités réelles)
-
-        # # Calculer la taille totale en cellules
-        # self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
-        # self.robot_size_cells = 2 * self.robot_size + 1  # Rayon à gauche + centre + rayon à droite
-
-        # print("Rayon du robot en cellules :", self.robot_size)
-        # print("Taille totale du robot en cellules :", self.robot_size_cells)
-
-        # # Add some obstacles to the grid for testing
-        # self.grid[5, 5] = 0  # Small block
-        # # self.grid[10, 5:15] = 0  # Horizontal wall
-        # # self.grid[15:18, 10:12] = 0  # Small block
-
-        # # Print the grid for visualization
-        # print("Generated grid for testing:")
-        # print(self.grid)
-
-        # '''
-        # End Testing zone
-        # '''
-
     def set_gnav(self, vision):
 
         row, col = vision.thymio_pos
@@ -62,36 +31,7 @@ class GlobalNavigation :
 
         #Adapt thymio size for grid
         self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
-        self.robot_size_cells = 2 * self.robot_size + 1  # Rayon à gauche + centre + rayon à droite
 
-        '''
-        Testing
-        '''
-        print("Rayon du robot en cellules :", self.robot_size)
-        print("Taille totale du robot en cellules :", self.robot_size_cells)
-        '''
-        Stop Testing
-        '''
-
-    
-    
-    #Function to verify if the robot is inside the grid and not on an obstacle.
-    def verification(self):
-        row, col = self.Start
-        print("Ce qu'on check à droite : ", -self.robot_size + col)
-        print("Ce qu'on check à gauche : ", self.robot_size + col)
-        for i in range(-self.robot_size + row, row + self.robot_size):
-            for j in range(-self.robot_size + col, col + self.robot_size):
-                
-                if i >= len(self.grid) or j >= len(self.grid[0]):
-                    print("Error : Thymio is not inside the grid !")
-                    return False
-                elif self.grid[i][j] == 0 :
-                    print("Error : Thymio is on an obstable !")
-                    return False
-
-        return True
-    
     #Function to adapt the path for thymio robot dimension
     def growing_obstacles(self):
         
@@ -114,12 +54,8 @@ class GlobalNavigation :
                                 modified_grid[ni][nj] = 0 # adding obstacles
 
         self.grid = modified_grid
-
-    # def heuristic(self, a, b):
-    #     # Implement the Manhattan distance heuristic
-    #     return abs(a[0] - b[0]) + abs(a[1] - b[1])
     
-    #Compute the diagonal heuristic
+    #Compute the Euclidian (diagonal) heuristic
     def heuristic(self, a, b) : 
 
         D = 1
@@ -132,14 +68,12 @@ class GlobalNavigation :
     #Path finding algorithme with A* and Manhattan distance 
     def grid_search(self): 
         
-        #Function to adapt the path for thymio robot dimension
         self.growing_obstacles()
-        a = self.verification()
+    
         ## initialize the variables above
-        came_from = {}      # to reconstruct path
-        g_costs = {self.Start: 0}    # cost from start to the cell
-        explored = set()    # to keep track of explored cells
-        operation_count = 0 # to count the number of operations
+        came_from = {}                      # to reconstruct path
+        g_costs = {self.Start: 0}           # cost from start to the cell
+        explored = set()                    # to keep track of explored cells
 
         open_set = [(self.heuristic(self.Start, self.Goal), 0, self.Start)]  # priority queue for A* (f_cost, g_cost, position)
             
@@ -203,10 +137,10 @@ class GlobalNavigation :
                 current_pos = came_from[current_pos]
             path.append(self.Start)
             path.reverse()
-            return path, explored, operation_count  # Return reversed path and explored cells
+            return path, explored  # Return reversed path and explored cells
         else:
         # If we reach here, no path was found
-            return None, explored, operation_count
+            return None, explored
         
     def display_grid_with_path(self, path):
 
@@ -243,17 +177,12 @@ class GlobalNavigation :
                     grid_with_path[ni, nj] = 4
 
         self.grid = grid_with_path
-        # Afficher la grille avec le chemin
-        #print("Grid with path:")
-        #print(grid_with_path)
-
-   
+ 
     def display_colored_grid(self):
 
         # 0 = black, 1 = white, 2 = yellow, 3 = red, 4 = blue"
         cmap = ListedColormap(['black', 'white', 'yellow', 'red', 'blue']) 
 
-    
         plt.imshow(self.grid, cmap=cmap, origin='upper', aspect='equal')
 
         # Add lines between cells
