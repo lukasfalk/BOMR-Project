@@ -249,7 +249,19 @@ async def main():
 
                 frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
-                pos_est = v.get_thymio_pos_in_cm(frame)
+                pos_est_tuple = v.get_thymio_pos_in_cm(frame)
+                
+                # Ensure pos_est is valid, otherwise wait until robot is detected
+                while pos_est_tuple[0] is None or pos_est_tuple[1] is None or pos_est_tuple[2] is None:
+                    print("Waiting for robot detection to initialize position...")
+                    await mc.client.sleep(0.5)
+                    frame = v.get_image(v._Vision__cap, False)
+                    frame = v.get_cutted_frame(False, False)
+                    pos_est_tuple = v.get_thymio_pos_in_cm(frame)
+                
+                # Convert tuple to numpy array for the Kalman filter
+                pos_est = np.array(pos_est_tuple)
+                print(f"Initial position detected: {pos_est}")
 
                 gnav.display_grid_with_path(current_path)
                 gnav.display_colored_grid()
@@ -412,15 +424,23 @@ async def main():
 def update_filtering(mc):
     global v, ekf, pos_est, P_est, pos_pred, first_call_filter
     frame = v.get_image(v._Vision__cap, False)
-    frame = v.get_cutted_frame(False, False)
-    pos_vision = v.get_thymio_pos_in_cm(frame)
+    frame = v.get_cutted_frame(True, False)
+    cv2.imshow("Update filtering", frame)
+    #Wait for a key press then close
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    pos_vision_tuple = v.get_thymio_pos_in_cm(frame)
     l = mc.node["motor.left.speed"]
     r = mc.node["motor.right.speed"]
     print(f"left = {l}; right = {r}")
-    if first_call_filter:
-        pos_est = pos_vision
-        first_call_filter = False
-    pos_vision = (None, None, None)
+    
+    # Convert vision measurement to numpy array if valid, otherwise use None array
+    if pos_vision_tuple[0] is not None and pos_vision_tuple[1] is not None and pos_vision_tuple[2] is not None:
+        pos_vision = np.array(pos_vision_tuple)
+    else:
+        pos_vision = np.array([None, None, None])
+    
+    # Run the Kalman filter (pos_est should already be a numpy array from initialization)
     pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
     _, _, robot = v.get_thymio_pos(frame)
     print(f"Abs angle = {robot}; Estimated angle = {pos_est[2]}")
