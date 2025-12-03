@@ -589,6 +589,8 @@ class Vision:
         #Normalize angle to [-pi, pi]
         if angle > np.pi:
             angle -= 2 * np.pi
+        if angle < -np.pi:
+            angle += 2 * np.pi
 
         return x, y, angle
     

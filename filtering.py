@@ -9,16 +9,16 @@ class Filtering :
     def __init__(self): 
 
         # Robot parameters
-        self.Ts = 0.01  # Sample time
+        self.Ts = 0.1  # Sample time
         self.interwheel_distance = 11 # [cm] Distance between the wheels
         # Q = np.diag([10, 10, 10])  # Process noise covariance
         
         self.thymio_speed_to_ms = 0.3846153846153846 / 1 # m/s conversion factor
 
         # Noise
-        self.var_v_left = 2.853437746116455
-        self.var_v_right = 5.5411623536575645
-        self.Q = np.diag([self.var_v_left**2, self.var_v_right**2, 10]) # Process noise covariance
+        self.var_v_left = 0.4 #3.8 #2.853437746116455
+        self.var_v_right = 0.4 #3.8 #5.5411623536575645
+        self.Q = np.diag([self.var_v_left**2, self.var_v_right**2, 0.01]) # Process noise covariance
         self.R = np.diag([0.00001**2, 0.00001**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
 
         self.x_est = np.zeros(3) #Initial estimation for states
@@ -80,7 +80,7 @@ class Filtering :
         self.x_est = given_x_est
         self.P_est = given_P_est
 
-        left_speed *= self.thymio_speed_to_ms
+        left_speed = (left_speed - 5) * self.thymio_speed_to_ms
         right_speed *= self.thymio_speed_to_ms
 
         self.x_prev = self.x_est

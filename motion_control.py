@@ -40,7 +40,10 @@ class Motion_control:
             pass
 
     def motors(self, l, r):
-        #update_filtering(self)
+        self.set_motors(l, r)
+        update_filtering(self)
+    
+    def set_motors(self, l, r):
         return {"motor.left.target": [int(l)], "motor.right.target": [int(r)]}
 
     def update_state(self):
@@ -61,7 +64,7 @@ class Motion_control:
         return max(prox) < KIDNAPPING_THR and not self.visible
 
     async def follow_instruction(self, path, error_pos, angle):
-        return await self.path_following(path, error_pos, angle)
+        await self.path_following(path, error_pos, angle)
 
     async def path_following(self, path, error_pos, angle):
         target_dist_steps = int(path[0])
@@ -103,8 +106,10 @@ class Motion_control:
         
         if error > np.pi:
             error = error - 2 * np.pi
+            print("Wrap angle")
         if error < -np.pi:
             error = error + 2 * np.pi
+            print("Wrap angle")
         return error
 
     async def fsm(self, path, error_pos, s, angle):

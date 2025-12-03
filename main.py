@@ -307,17 +307,16 @@ async def main():
                 target_pos = None
                 error_pos = 0
                 visualizing_counter = 0
+
+                frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                frame = v.get_cutted_frame(False, False)
+                pos_est, P_est, pos_pred = update_filtering(mc)
                 
             if state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
                 #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
                 #pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
                 #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
                 #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
-
-                frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
-                frame = v.get_cutted_frame(False, False)
-                pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
-                pos_est, P_est, pos_pred = update_filtering(mc)
 
                 #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
                 #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
@@ -327,6 +326,10 @@ async def main():
                 #     await mc.node.set_variables(mc.motors(0, 0))#stop the motors
                 #     just_changed_state = True
                 #     continue
+
+                frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                frame = v.get_cutted_frame(False, False)
+                pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
 
                 pos_robot_est = pos_est[0], pos_est[1] 
                 angle_robot_est =  pos_est[2] 
@@ -386,7 +389,7 @@ async def main():
 
                     print(f"Robot at {pos_robot_est} and going to {target_pos}")
                     print(f"Step {step_count-1} (norm, angle): {next_step}")
-                    state = await mc.fsm(next_step, v, error_pos, state, angle_robot_est)
+                    state = await mc.fsm(next_step, error_pos, state, angle_robot_est)
 
                 elif state != State.GOAL_REACHED: # try to reach again the goal
                     step_count -= 1 
@@ -413,9 +416,11 @@ def update_filtering(mc):
     pos_vision = v.get_thymio_pos_in_cm(frame)
     l = mc.node["motor.left.speed"]
     r = mc.node["motor.right.speed"]
+    print(f"left = {l}; right = {r}")
     if first_call_filter:
         pos_est = pos_vision
         first_call_filter = False
+    pos_vision = (None, None, None)
     pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
     _, _, robot = v.get_thymio_pos(frame)
     print(f"Abs angle = {robot}; Estimated angle = {pos_est[2]}")
