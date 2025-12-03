@@ -383,7 +383,8 @@ class Vision:
             if plot:
                 print("Setting up cropping parameters...")
             frame = self.get_image(self.__cap,plot)
-            cropped_frame,_ = self.get_frame_from_aruco(frame)
+            _,_ = self.get_frame_from_aruco(frame)
+            cropped_frame = cv2.warpPerspective(self.get_image(self.__cap,plot), self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
         else:
             cropped_frame = cv2.warpPerspective(self.get_image(self.__cap,plot), self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
 

@@ -16,16 +16,16 @@ from motion_control import *
 # import motion_control
 # import filtering
 # import local_avoidance
-
+import time
 from enum import Enum
 
 v = Vision()
+'''
 ekf = Filtering()
 
 pos_est = np.zeros(3)
 P_est = np.diag([1e-3, 1e-3, 1e-3])
-
-first_call_filter = True
+'''
 
 class State(Enum):
     GRID_CREATION = 0
@@ -183,9 +183,9 @@ def displacement_angle_to_origin_angle(path):
 # sortie avoidance -> le faire + fct qui trouve le next step le plus proche de la position actuelle (pas besoin de partir depuis le début du path mais depuis le dernier step_count (i.e. celui avant avoidance))
 # -> faire un step_count bien fait dans le main
 async def main():
-    global v, pos_est, P_est, pos_pred
+    global v, ekf, pos_est, P_est, pos_pred
     # threshold (cm) to consider the final goal reached
-    GOAL_EPS_CM = 2.0
+    GOAL_EPS_CM = 5.0
     SKIP_STEPS =  3 
 
     try:        
@@ -234,7 +234,7 @@ async def main():
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
-                v.vision(5,50,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
+                v.vision(5,20,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
                 v.plot_grid()
 
                 # si v est une instance de Vision et que v.vision(...) a été appelé
@@ -247,7 +247,7 @@ async def main():
                     print("No path found, obstacles probably to close")
                     break
 
-                frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                _ = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_est_tuple = v.get_thymio_pos_in_cm(frame)
                 
@@ -255,7 +255,7 @@ async def main():
                 while pos_est_tuple[0] is None or pos_est_tuple[1] is None or pos_est_tuple[2] is None:
                     print("Waiting for robot detection to initialize position...")
                     await mc.client.sleep(0.5)
-                    frame = v.get_image(v._Vision__cap, False)
+                    _ = v.get_image(v._Vision__cap, False)
                     frame = v.get_cutted_frame(False, False)
                     pos_est_tuple = v.get_thymio_pos_in_cm(frame)
                 
@@ -320,15 +320,19 @@ async def main():
                 error_pos = 0
                 visualizing_counter = 0
 
-                frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                _ = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
-                pos_est, P_est, pos_pred = update_filtering(mc)
+                mc.set_ekf_initial_state(v.get_thymio_pos_in_cm(frame))
+                _, _, _ = update_filtering(mc)
                 
             if state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
                 #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
                 #pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
                 #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
                 #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
+
+                # Update filtering BEFORE using pos_est in this iteration
+                #update_filtering(mc)
 
                 #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
                 #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
@@ -339,11 +343,21 @@ async def main():
                 #     just_changed_state = True
                 #     continue
 
-                frame = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                _ = v.get_image(v._Vision__cap, False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
 
-                pos_robot_est = pos_est[0], pos_est[1] 
+                # Update the Kalman filter with current measurements
+                '''
+                pos_est = ekf.x_est
+                P_est = ekf.P_est
+                pos_pred = ekf.x_pred'''
+
+                pos_est = mc.pos_est
+
+                #pos_robot_est = pos_est[0], pos_est[1] 
+                pos_est2 = mc.ekf.x_est#To kick -> for testing otherwise PUT pos_est from mc
+                pos_robot_est = pos_est2[0], pos_est2[1] 
                 angle_robot_est =  pos_est[2] 
                 
                 # if visualizing_counter >= 2:
@@ -359,9 +373,9 @@ async def main():
                                                     cm_to_pixel_global, pos_robot_vision, pos_robot_est)
                 cv2.imshow("Real-time Navigation View", realtime_image)
                 if pos_robot_vision[0] is None:
-                    cv2.waitKey(100)  # Afficher pendant 1ms pour permettre la mise à jour
+                    cv2.waitKey(20)  # Afficher pendant 20ms pour permettre la mise à jour
                 else:
-                    cv2.waitKey(1)
+                    cv2.waitKey(1)  # Afficher pendant 1ms pour permettre la mise à jour
                 print("Visualisation")
                 
 
@@ -383,7 +397,7 @@ async def main():
 
                     # If robot closer to goal than next step => go one step further
                     #print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist target-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
-                    while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_robot_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
+                    '''while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_robot_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
                         if step_count + 1 >= len(pos_to_goal):
                             print("overflow pos_to_goal")
                             break
@@ -391,17 +405,26 @@ async def main():
                             step_count += 1
                             target_pos = pos_to_goal[step_count]
                             print(f"Skip step {step_count - 1}")
+                            '''
 
                     dx = target_pos[0] - pos_robot_est[0]
                     dy = target_pos[1] - pos_robot_est[1]
                     norm = np.linalg.norm([dx, dy])
                     angle = -np.atan2(dy, dx)
                     next_step = (norm, angle)
-                    step_count += 1
 
                     print(f"Robot at {pos_robot_est} and going to {target_pos}")
                     print(f"Step {step_count-1} (norm, angle): {next_step}")
-                    state = await mc.fsm(next_step, error_pos, state, angle_robot_est)
+                    #state = await mc.fsm(next_step, error_pos, state, angle_robot_est)
+                    state = await mc.fsm(next_step, error_pos, state)
+
+                    #Check if waypoint is passed -> if it did -> step + 1
+                    if(passed_way_point(pos_robot_est, target_pos, GOAL_EPS_CM)):
+                        if step_count < len(pos_to_goal):
+                            step_count += 1
+                        else:
+                            state = State.GOAL_REACHED
+
 
                 elif state != State.GOAL_REACHED: # try to reach again the goal
                     step_count -= 1 
@@ -421,14 +444,32 @@ async def main():
         cv2.destroyAllWindows()  # Assurez que les fenêtres sont fermées
         await mc.close()
 
+'''
+Check if the robot has passed the waypoint within a certain threshold.
+'''
+def passed_way_point(robot_pos, way_point, threshold_cm):
+    distance = np.linalg.norm(np.subtract(robot_pos, way_point))
+    return distance < threshold_cm
+
+#first_call_filter = True
 def update_filtering(mc):
-    global v, ekf, pos_est, P_est, pos_pred, first_call_filter
-    frame = v.get_image(v._Vision__cap, False)
-    frame = v.get_cutted_frame(True, False)
-    cv2.imshow("Update filtering", frame)
-    #Wait for a key press then close
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    global v
+
+    #print the difference in time between two calls
+    
+    current_time = time.time()
+    #if mc.last_time_filter is None:
+        #print("First filtering call - initializing time")
+    #else:
+    if mc.last_time_filter is not None:
+        mc.delta_t_filter = current_time - mc.last_time_filter
+        print(f"------ Time since last filtering call: {mc.delta_t_filter:.3f} seconds")
+        mc.ekf.set_Ts(mc.delta_t_filter/2)
+    mc.last_time_filter = current_time
+    
+
+    _ = v.get_image(v._Vision__cap, False)
+    frame = v.get_cutted_frame(False, False)
     pos_vision_tuple = v.get_thymio_pos_in_cm(frame)
     l = mc.node["motor.left.speed"]
     r = mc.node["motor.right.speed"]
@@ -440,11 +481,26 @@ def update_filtering(mc):
     else:
         pos_vision = np.array([None, None, None])
     
-    # Run the Kalman filter (pos_est should already be a numpy array from initialization)
-    pos_est, P_est, pos_pred = ekf.extended_kalman_filter(pos_est, P_est, l, r, pos_vision)
-    _, _, robot = v.get_thymio_pos(frame)
-    print(f"Abs angle = {robot}; Estimated angle = {pos_est[2]}")
-    return pos_est, P_est, pos_pred
+    # Run the Kalman filter and UPDATE GLOBAL VARIABLES
+    if mc.first_call == False:#To kick -> for testing
+        print("In first truc")
+        pos_vision = (None, None, None)
+    mc.pos_est, mc.P_est, mc.pos_pred = mc.ekf.extended_kalman_filter(mc.pos_est, mc.P_est, l, r, pos_vision)
+    mc.first_call = False#To kick -> for testing
+    mc.pos_est = v.get_thymio_pos_in_cm(frame)#To kick -> for testing
+    
+    x_abs, y_abs, robot = v.get_thymio_pos_in_cm(frame)
+    if x_abs is not None and y_abs is not None and robot is not None:
+        print(f"Vision - pos: ({x_abs:.2f}, {y_abs:.2f}), angle: {robot:.3f}")
+    else:
+        print("Vision - Thymio not detected")
+    print(f"update_filtering - pos: ({mc.ekf.x_est[0]:.2f}, {mc.ekf.x_est[1]:.2f}), angle: {mc.ekf.x_est[2]:.3f}")
+    if robot is not None:
+        print(f"Abs angle = {robot}; Estimated angle = {mc.pos_est[2]}")
+    else:
+        print(f"Abs angle = None (not detected); Estimated angle = {mc.pos_est[2]}")
+    mc.angle = mc.pos_est[2]
+    return mc.pos_est, mc.P_est, mc.pos_pred
 
 if __name__ == "__main__":
         asyncio.run(main())

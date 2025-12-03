@@ -30,6 +30,9 @@ class Filtering :
         self.P_prev = None
         self.omega = None 
 
+    def set_Ts(self, Ts: float):
+        self.Ts = Ts
+
     def wrap_angle(self, theta: float) -> float:
         return (theta + np.pi) % (2*np.pi) - np.pi
 
@@ -101,9 +104,7 @@ class Filtering :
             self.x_est = self.x_pred
             self.P_est = self.P_pred
 
-        given_x_est = self.x_est
-
-        return given_x_est, self.P_est, self.x_pred
+        return self.x_est, self.P_est, self.x_pred
 
     # pos_odo = []
     # pos_filt = []
