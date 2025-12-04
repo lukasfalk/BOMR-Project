@@ -3,8 +3,12 @@ import numpy as np
 from tdmclient import ClientAsync
 
 from local_avoidance import *
-from main import update_filtering
+#from main import update_filtering
 from filtering import Filtering
+
+from vision import Vision
+
+import time
 
 FORWARD_SPEED = 100
 GAIN_ANGLE = 60
@@ -31,6 +35,7 @@ class Motion_control:
         self.last_time_filter = None
         self.delta_t_filter = None
         self.first_call = True
+        #self.v = Vision()
 
     @classmethod
     async def create(cls):
@@ -45,7 +50,7 @@ class Motion_control:
     async def close(self):
         try:
             if self.node is not None:
-                await self.node.set_variables(self.motors(0, 0))
+                await self.node.set_variables(self.motors(0, 0,None))
                 await self.node.unlock()
         except Exception:
             pass
@@ -53,8 +58,8 @@ class Motion_control:
     def set_ekf_initial_state(self, pos):
         self.pos_est = pos
 
-    def motors(self, l, r):
-        update_filtering(self)
+    def motors(self, l, r,v):
+        self.update_filtering(v)
         return {"motor.left.target": [int(l)], "motor.right.target": [int(r)]}
         #return self.set_motors(l, r)
     
@@ -78,10 +83,10 @@ class Motion_control:
         global KIDNAPPING_THR
         return max(prox) < KIDNAPPING_THR and not self.visible
 
-    async def follow_instruction(self, path, error_pos):
-        await self.path_following(path, error_pos)
+    async def follow_instruction(self, path, error_pos,v):
+        await self.path_following(path, error_pos,v)
 
-    async def path_following(self, path, error_pos):
+    async def path_following(self, path, error_pos,v):
         self.last_time_filter = None #reset time for filtering (since we stopped moving)
         target_dist_steps = int(path[0])
         target_angle = path[1]
@@ -90,7 +95,7 @@ class Motion_control:
         #while step_count < target_dist_steps and abs(self.compute_error_angle(target_angle, self.angle)) > self.angle_epsilon:
         while step_count < target_dist_steps:
             if test_obstacle_detected(list(self.node["prox.horizontal"])):
-                await self.node.set_variables(self.motors(0, 0))
+                await self.node.set_variables(self.motors(0, 0,v))
                 return
             
             #error_angle = self.compute_error_angle(target_angle, angle)
@@ -110,7 +115,7 @@ class Motion_control:
             left_speed = max(min(left_speed, 500), -500)
             right_speed = max(min(right_speed, 500), -500)
 
-            await self.node.set_variables(self.motors(left_speed, right_speed))
+            await self.node.set_variables(self.motors(left_speed, right_speed,v))
             
             await self.client.sleep(STEP_DT)
             
@@ -132,15 +137,15 @@ class Motion_control:
 
 
 
-    async def fsm(self, path, error_pos, s):
+    async def fsm(self, path, error_pos, s,v):
         self.visible = True
         self.update_state()
         if self.state == "MOVE":
-            await self.follow_instruction(path, error_pos)
+            await self.follow_instruction(path, error_pos,v)
 
         self.update_state()
         if self.state == "KIDNAPPED":
-            await self.node.set_variables(self.motors(0, 0))
+            await self.node.set_variables(self.motors(0, 0,v))
             return s.KIDNAPPING
         
         elif self.state == "OBSTACLE":
@@ -149,3 +154,55 @@ class Motion_control:
         
         else:
             return s.GLOBAL_NAVIGATION
+        
+    #first_call_filter = True
+    def update_filtering(self, v):
+
+        #print the difference in time between two calls
+        
+        current_time = time.time()
+        #if self.last_time_filter is None:
+            #print("First filtering call - initializing time")
+        #else:
+        if self.last_time_filter is not None:
+            self.delta_t_filter = current_time - self.last_time_filter
+            print(f"------ Time since last filtering call: {self.delta_t_filter:.3f} seconds")
+            self.ekf.set_Ts(self.delta_t_filter/2)
+        self.last_time_filter = current_time
+        
+
+        _ = v.get_image(False)
+        frame = v.get_cutted_frame(False, False)
+        pos_vision_tuple = v.get_thymio_pos_in_cm(frame)
+        l = self.node["motor.left.speed"]
+        r = self.node["motor.right.speed"]
+        print(f"left = {l}; right = {r}")
+        
+        # Convert vision measurement to numpy array if valid, otherwise use None array
+        if pos_vision_tuple[0] is not None and pos_vision_tuple[1] is not None and pos_vision_tuple[2] is not None:
+            pos_vision = np.array(pos_vision_tuple)
+        else:
+            pos_vision = np.array([None, None, None])
+        
+        # Run the Kalman filter and UPDATE GLOBAL VARIABLES
+        # if self.first_call == False:#To kick -> for testing
+        #     print("In first truc")
+        #     pos_vision = (None, None, None)
+        self.pos_est, self.P_est, self.pos_pred = self.ekf.extended_kalman_filter(self.pos_est, self.P_est, l, r, pos_vision)
+        self.first_call = False#To kick -> for testing
+        self.pos_est = v.get_thymio_pos_in_cm(frame)#To kick -> for testing
+        
+        x_abs, y_abs, robot = v.get_thymio_pos_in_cm(frame)
+        if x_abs is not None and y_abs is not None and robot is not None:
+            print(f"Vision - pos: ({x_abs:.2f}, {y_abs:.2f}), angle: {robot:.3f}")
+        else:
+            print("Vision - Thymio not detected")
+        print(f"update_filtering - pos: ({self.ekf.x_est[0]:.2f}, {self.ekf.x_est[1]:.2f}), angle: {self.ekf.x_est[2]:.3f}")
+        if robot is not None:
+            print(f"Abs angle = {robot}; Estimated angle = {self.pos_est[2]}")
+        else:
+            print(f"Abs angle = None (not detected); Estimated angle = {self.pos_est[2]}")
+        self.angle = self.pos_est[2]
+        return self.pos_est, self.P_est, self.pos_pred
+
+
