@@ -10,8 +10,10 @@ from vision import Vision
 import time
 
 FORWARD_SPEED = 100
-GAIN_ANGLE = 60
+GAIN_ANGLE = 40
 GAIN_FWD = 5
+
+STEP_DT = 0.01
 
 KIDNAPPING_THR = 40
 
@@ -92,11 +94,19 @@ class Motion_control:
         target_dist_steps = int(path[0])
         target_angle = path[1]
         step_count = 0
-
-        while step_count < target_dist_steps and step_count < 15:
+        
+        #while step_count < target_dist_steps and abs(self.compute_error_angle(target_angle, self.angle)) > self.angle_epsilon:
+        while step_count < target_dist_steps/5 and step_count < 20:
             if test_obstacle_detected(list(self.node["prox.horizontal"])):
                 await self.node.set_variables(self.motors(0, 0,v))
                 return
+            
+            if self.test_kidnapping(list(self.node["prox.ground.delta"])):
+                self.state = "KIDNAPPED"
+                print("Kidnapping detected during path following")
+                await self.node.set_variables(self.motors(0, 0,v))
+                self.was_still = True
+                break
 
             error_angle = self.compute_error_angle(target_angle, self.angle)
 
@@ -111,6 +121,8 @@ class Motion_control:
             right_speed = max(min(right_speed, 500), -500)
 
             await self.node.set_variables(self.motors(left_speed, right_speed,v))
+            
+            await self.client.sleep(STEP_DT)
             
             step_count += 1
 

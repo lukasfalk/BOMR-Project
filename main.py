@@ -13,19 +13,10 @@ from vision import Vision
 from global_nav import GlobalNavigation #from global_nav import GlobalNavigation
 from filtering import Filtering
 from motion_control import *
-# import motion_control
-# import filtering
-# import local_avoidance
 import time
 from enum import Enum
 
 v = Vision()
-'''
-ekf = Filtering()
-
-pos_est = np.zeros(3)
-P_est = np.diag([1e-3, 1e-3, 1e-3])
-'''
 
 class State(Enum):
     GRID_CREATION = 0
@@ -201,50 +192,16 @@ def visualize_realtime(
 
     return image_overlay
 
-def distance_directe(path: Iterable[Tuple[float, float]], degrees: bool = False) -> float:
-    """
-    Calcule la distance directe entre l'origine et la position finale
-    après avoir appliqué les déplacements donnés par (norm, angle).
-    - path: iterable de (norm, angle)
-    - degrees: True si les angles sont en degrés (sinon radians)
-    """
-    x = y = 0.0
-    to_rad = math.radians if degrees else (lambda a: a)
-    for r, theta in path:
-        a = to_rad(theta)
-        x += r * math.cos(a)
-        y += r * math.sin(a)
-    return math.hypot(x, y)
-
-def displacement_angle_to_origin_angle(path):
-    '''
-    Convert a path defined by displacement vectors (norm, angle) to absolute angles from origin.
-    '''
-    abs_path = []
-    current_angle = 0.0
-    for norm, angle in path:
-        current_angle += angle
-        # Normalize to [-pi, pi]
-        normalized = (current_angle + np.pi) % (2*np.pi) - np.pi
-        abs_path.append((norm, normalized))
-    return abs_path
-
-#TODO:
-# passer le tableau de vecteur de déplacement en (x,y)_k (soit garder le bordel dans le main pour l'instant soit faire une vraie fonction)
-# finir le controlleur (ATTENTION -> angle pas dans le même repère -> cf. au fond de vision.py pour des fonctions de test de l'angle) (orientation caméra -> texte lisible depuis la map)
-# sortie avoidance -> le faire + fct qui trouve le next step le plus proche de la position actuelle (pas besoin de partir depuis le début du path mais depuis le dernier step_count (i.e. celui avant avoidance))
-# -> faire un step_count bien fait dans le main
 async def main():
-    global v, ekf, pos_est, P_est, pos_pred
-    # threshold (cm) to consider the final goal reached
-    GOAL_EPS_CM = 5.0
-    SKIP_STEPS =  15 
+    #global v, ekf, pos_est, P_est, pos_pred
+    GOAL_EPS_CM = 5.0 #threshold (cm) to consider the final goal reached
+    WAYPOINT_EPS_CM = 6.0 #threshold (cm) to consider a waypoint reached
+    SKIP_STEPS =  10 #steps to skip after local avoidance 
 
     try:        
-        # Initialize variables for path visualization
-        current_path = None  # Vector of displacement vectors at each step
+        #Initialize variables for path visualization
+        current_path = None  #Vector of displacement vectors at each step
         current_image = None
-        cm_per_pixel_global = None
     
         try:
             mc = await Motion_control.create()
@@ -253,7 +210,7 @@ async def main():
             return
         gnav = GlobalNavigation()
         step_count = 0
-        current_path = None  # Will be filled with displacement vectors
+        current_path = None  #Will be filled with displacement vectors
         
         just_changed_state = False  
         state = State.GRID_CREATION
@@ -285,13 +242,11 @@ async def main():
                     just_changed_state = True
 
             if state == State.GRID_CREATION:
-                print("Grid Creation")
-                v.flip()
-                v.vision(5,50,False,5)  #acquisition delay, white threshold, plot, P (pixels per cell)
-                v.plot_grid()
+                v.vision(5,60,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
+                #v.plot_grid()
 
-                # si v est une instance de Vision et que v.vision(...) a été appelé
-                v.overlay_grid_on_cropped()          # ouvre une fenêtre avec la superposition
+                #Plot the grid on a frame
+                #v.overlay_grid_on_cropped()
                  
                 gnav.set_gnav(v)
                 current_path, explored = gnav.grid_search()
@@ -304,7 +259,7 @@ async def main():
                 frame = v.get_cutted_frame(False, False)
                 pos_est_tuple = v.get_thymio_pos_in_cm(frame)
                 
-                # Ensure pos_est is valid, otherwise wait until robot is detected
+                #Ensure pos_est is valid, otherwise wait until robot is detected
                 while pos_est_tuple[0] is None or pos_est_tuple[1] is None or pos_est_tuple[2] is None:
                     print("Waiting for robot detection to initialize position...")
                     await mc.client.sleep(0.5)
@@ -312,34 +267,25 @@ async def main():
                     frame = v.get_cutted_frame(False, False)
                     pos_est_tuple = v.get_thymio_pos_in_cm(frame)
                 
-                # Convert tuple to numpy array for the Kalman filter
+                #Convert tuple to numpy array for the Kalman filter
                 pos_est = np.array(pos_est_tuple)
-                print(f"Initial position detected: {pos_est}")
 
-                gnav.display_grid_with_path(current_path)
-                gnav.display_colored_grid()
-                
-                print("A* path length =", len(current_path)-1, "\n", current_path)
+                #gnav.display_grid_with_path(current_path)
+                #gnav.display_colored_grid()
 
                 #gnav -> find the array of vectors (deplacement at step k)
                 #Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
                 #Caution: theta is in radians AND relative to the origin and not between steps -> theta_k != theta_k+1 - theta_k
                 vector_path = gnav.vectors_for_displacement(current_path)
-                print("Vector path 0 (norm, angle):", vector_path)
-                distance_directe_result = distance_directe(vector_path, degrees=False)
-                print(f"Direct distance to goal after following path: {distance_directe_result:.2f} cm")
 
                 step_count = 1
 
                 vector_path_inversed = [] #in case of kidnapping we do not want the paths to adds up
                 for idx in range(len(vector_path)):
                     norm, angle = vector_path[idx]
-                    vector_path_inversed.append((norm, -angle))  # angles already in correct reference frame
+                    vector_path_inversed.append((norm, -angle))  #angles not in correct reference -> invert them
 
-                if vector_path is not None:
-                    #current_image = v.get_image(False)
-                    current_image = v.get_cutted_frame(False,False)
-                    print("image size:", current_image.shape)
+                current_image = v.get_cutted_frame(False,False)
                 
                 if current_image is not None:
                     #Get start position (cm), scale (pixels/cm) and start orientation (radians)
@@ -349,15 +295,13 @@ async def main():
                         print("Scale unavailable: skipping path plotting")
                     else:
                         if x_cm is None or y_cm is None:
-                            #print("Start position not detected: using (0,0) as fallback")
                             start_pos = np.zeros(2)
                         else:
                             start_pos = np.array([x_cm, y_cm])
             
-                # save scale (pixels per cm) for later conversions
+                #save scale (pixels per cm) for later conversions
                 cm_to_pixel_global = cm_to_pixel
 
-                #vector_path_inversed = [(0, 0), (0, np.pi),(0, np.pi),(0, np.pi)]
                 next_step = None
                 pos_to_goal = [(float(start_pos[0]), float(start_pos[1]))]
                 for norm, angle in vector_path_inversed:
@@ -367,124 +311,78 @@ async def main():
                     pos_to_goal.append((x, y))
                 state = State.GLOBAL_NAVIGATION
                 just_changed_state = True
-                print(f"Pos to goal = {pos_to_goal}")
 
                 target_pos = None
                 error_pos = 0
-                visualizing_counter = 0
 
                 _ = v.get_image(False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
-                #mc.v = v#copy the init vision into the motion control instance
                 mc.set_ekf_initial_state(v.get_thymio_pos_in_cm(frame))
                 mc.was_still=False
                 mc.update_filtering(v)
                 mc.was_still=True
                 
             if state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
-                #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
-                #pos_to_goal = [(30, 40), (35, 40), (40, 40), (45, 40), (50, 40), (55, 40), (60, 40), (65, 40), (70, 40), (75, 40), (80, 40)]
-                #pos_to_goal = [(40, 20), (50, 30), (60, 40), (70, 50), (80, 60)]
-                #pos_to_goal = [(30, 30), (35, 30), (40, 35), (45, 35), (50, 40), (55, 40), (60, 45), (65, 45), (70, 50), (75, 50), (80, 55)]
-
-                # Update filtering BEFORE using pos_est in this iteration
-                #update_filtering(mc)
-
-                
-
                 _ = v.get_image(False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)
                 angle_robot_vision = pos_robot_vision[2]
 
-
-                #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
-                #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
                 prox_gnd = list(mc.node["prox.ground.delta"])
-                print(f"Ground sensors: {prox_gnd}")
-                if pos_robot_vision[0] is None and max(prox_gnd) < 40:#if kidnapped and it hides the   marker
-                    print("Kidnapped during path following (due to no robot detection)")
+                if pos_robot_vision[0] is None and max(prox_gnd) < 40:#if kidnapped and it hides the marker
+                    print("Kidnapped during path following")
                     state = State.KIDNAPPING
                     await mc.node.set_variables(mc.motors(0, 0,v))#stop the motors
                     just_changed_state = True
                     continue
 
-                # Update the Kalman filter with current measurements
-                pos_est = mc.pos_est
-
-                #pos_robot_est = pos_est[0], pos_est[1] 
-                #pos_est2 = mc.ekf.x_est#To kick -> for testing otherwise PUT pos_est from mc
-                #pos_robot_est = pos_est2[0], pos_est2[1] 
-                pos_robot_est = pos_est[0], pos_est[1]
-                angle_robot_est =  pos_est[2] 
+                #update the estimated position (the one to print) with the EKF which is inside motion_control
+                pos_robot_est = mc.pos_est[0], mc.pos_est[1]
+                angle_robot_est =  mc.pos_est[2] 
                 
-                # if visualizing_counter >= 2:
-                #     # Display real-time visualization
-                #     realtime_image = visualize_realtime(frame, vector_path_inversed, start_pos, 
-                #                                     cm_to_pixel_global, pos_robot_vision, pos_robot_est)
-                #     cv2.imshow("Real-time Navigation View", realtime_image)
-                #     cv2.waitKey(1)  # Afficher pendant 1ms pour permettre la mise à jour
-                #     visualizing_counter = 0
-                # else:
-                #     visualizing_counter += 1
                 realtime_image = visualize_realtime(frame, vector_path_inversed, start_pos, 
                                                     cm_to_pixel_global, pos_robot_vision[:2], 
                                                     pos_robot_est, angle_robot_est, angle_robot_vision)
                 cv2.imshow("Real-time Navigation View", realtime_image)
                 if pos_robot_vision[0] is None:
-                    cv2.waitKey(20)  # Afficher pendant 20ms pour permettre la mise à jour
-                else:
-                    cv2.waitKey(1)  # Afficher pendant 1ms pour permettre la mise à jour
-                print("Visualisation")
+                    cv2.waitKey(19)  #When the vision is lost -> slow down the visualization to not flood the camera (30 fps but motion control already slow it down)
+                cv2.waitKey(1)#necessary to update the imshow window 
                 
 
                 if abs(np.subtract(pos_robot_est, pos_to_goal[-1])[0]) < GOAL_EPS_CM and abs(np.subtract(pos_robot_est, pos_to_goal[-1])[1]) < GOAL_EPS_CM:
-                    print(f"Robot at {pos_robot_est} and goal is {pos_to_goal[-1]}")
                     state = State.GOAL_REACHED
                     
                 elif step_count < len(pos_to_goal):
 
                     if state == State.OBS_AVOIDED:
-                        step_count += SKIP_STEPS
+                        if(step_count + SKIP_STEPS >= len(pos_to_goal)):
+                            step_count = len(pos_to_goal) - 1
+                        else:
+                            step_count += SKIP_STEPS
                         state = State.GLOBAL_NAVIGATION
 
                     elif target_pos is not None:
                         error_pos = np.linalg.norm(target_pos) - np.linalg.norm(pos_robot_est)
-                    #print(f"Error pos = {error_pos} \n")
 
-                    target_pos = pos_to_goal[step_count]
-
-                    # If robot closer to goal than next step => go one step further
-                    #print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist target-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
-                    while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_robot_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
-                        if step_count + 1 >= len(pos_to_goal):
-                            print("overflow pos_to_goal")
-                            break
-                        else:
-                            step_count += 1
-                            target_pos = pos_to_goal[step_count]
-                            print(f"Skip step {step_count - 1}")
-                            
+                    target_pos = pos_to_goal[step_count]                        
 
                     dx = target_pos[0] - pos_robot_est[0]
                     dy = target_pos[1] - pos_robot_est[1]
                     norm = np.linalg.norm([dx, dy])
-                    angle = -np.atan2(dy, dx)
+                    angle = -np.arctan2(dy, dx)
                     next_step = (norm, angle)
 
-                    print(f"Robot at {pos_robot_est} and going to {target_pos}")
-                    print(f"Step {step_count-1} (norm, angle): {next_step}")
-                    #state = await mc.fsm(next_step, error_pos, state, angle_robot_est)
                     state = await mc.fsm(next_step, error_pos, state,v)
-                    print(f"0000000000000000000000 State after FSM: {state}")
                     mc.was_still=True
 
                     #Check if waypoint is passed -> if it did -> step + 1
-                    if(passed_way_point(pos_robot_est, target_pos, GOAL_EPS_CM)):
-                        if step_count < len(pos_to_goal):
+                    while(passed_way_point(pos_robot_est, target_pos, WAYPOINT_EPS_CM)):
+                        if step_count < len(pos_to_goal) - 1:
                             step_count += 1
+                            target_pos = pos_to_goal[step_count]
                         else:
                             state = State.GOAL_REACHED
+                            break
 
 
                 elif state != State.GOAL_REACHED: # try to reach again the goal
@@ -500,31 +398,23 @@ async def main():
                 
                 break
 
-                # #Wait finish signal
-                # cv2.waitKey(0)
-                # cv2.destroyAllWindows()
-                # break
-
     finally:
-        cv2.destroyAllWindows()  # Assurez que les fenêtres sont fermées
+        cv2.destroyAllWindows()  #Close all windows
         await mc.close()
 
-'''
-Check if the robot has passed the waypoint within a certain threshold.
-'''
 def passed_way_point(robot_pos, way_point, threshold_cm):
+    '''
+    Check if the robot has passed the waypoint within a certain threshold.
+    '''
     distance = np.linalg.norm(np.subtract(robot_pos, way_point))
     return distance < threshold_cm
 
 def plot_position_comparison(mc):
-    """
+    '''
     Plot comparison between measured positions (mc.plot_pos) and estimated positions (mc.plot_est_pos).
     Creates 3 subplots: x position, y position, and angle over time.
     Adds gray vertical bars when vision is lost/recovered.
-    
-    Args:
-        mc: Motion_control instance containing plot_pos and plot_est_pos arrays
-    """
+    '''
     if len(mc.plot_pos) == 0 or len(mc.plot_est_pos) == 0:
         print("No position data to plot")
         return

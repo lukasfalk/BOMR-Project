@@ -115,7 +115,6 @@ class Filtering :
             self.update_state_est(z)
         else:
             # No measurement update. Estimated states are the predicted states
-            print(f"Measurement update without z = {z}")
             self.x_est = self.x_pred
             self.P_est = self.P_pred
 

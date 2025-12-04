@@ -36,9 +36,6 @@ class GlobalNavigation :
     def growing_obstacles(self):
         
         modified_grid = np.copy(self.grid)
-        
-        print(len(self.grid))
-        print(len(self.grid[0]))
 
         for i in range(len(self.grid)):
             for j in range(len(self.grid[0])):
@@ -145,7 +142,7 @@ class GlobalNavigation :
         # Créer une copie de la grille pour ne pas modifier l'originale
         grid_with_path = self.grid.copy()
 
-        thickness = 2  # Épaisseur pour le chemin, start et goal
+        thickness = 0  # Épaisseur pour le chemin, start et goal
         half_thickness = thickness // 2
 
         # Marquer le chemin sur la grille avec épaisseur
