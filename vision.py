@@ -352,7 +352,7 @@ class Vision:
         
         #Transformation
         self._M = cv2.getPerspectiveTransform(centers, dst_pts)
-        cropped_frame = cv2.warpPerspective(frame, self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)#Apply borderMode to reduce distortion at the edges (should not been used)
+        cropped_frame = cv2.warpPerspective(frame, self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)#Apply borderMode to reduce distortion at the edges (should not be used)
         return cropped_frame,self._M
 
     def get_cutted_frame(self,plot=False,resample=False):
