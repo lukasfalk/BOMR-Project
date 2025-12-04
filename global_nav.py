@@ -145,7 +145,7 @@ class GlobalNavigation :
         # Créer une copie de la grille pour ne pas modifier l'originale
         grid_with_path = self.grid.copy()
 
-        thickness = 2  # Épaisseur pour le chemin, start et goal
+        thickness = 0  # Épaisseur pour le chemin, start et goal
         half_thickness = thickness // 2
 
         # Marquer le chemin sur la grille avec épaisseur
