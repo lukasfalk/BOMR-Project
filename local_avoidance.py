@@ -1,0 +1,41 @@
+import numpy as np
+
+PROX_THR_HI = 2000
+PROX_THR_LO = 1500
+
+def test_obstacle_detected(prox):
+    global PROX_THR_HI
+    return max(prox[:5]) > PROX_THR_HI
+
+def test_no_obstacle(prox):
+    global PROX_THR_LO
+    return max(prox[:5]) < PROX_THR_LO
+
+async def avoid_obstacle(mc, v):
+    no_obstacle = False
+
+    w_l = [4,  2, -2, -1, -2, 1, 0]
+    w_r = [-2, -1, -2,  2,  4, 0, 1]
+    w = [w_l,
+         w_r]
+
+    x = np.zeros(7) # NN input prox + memory
+    y = np.zeros(2) # NN output motor commands (left, right)
+
+    while not no_obstacle:
+        prox = list(mc.node["prox.horizontal"])
+        x[5] = y[0] // 10
+        x[6] = y[1] // 10
+        x = np.array(prox) // 100
+        y = w @ x.T
+
+        await mc.node.set_variables(mc.motors(int(y[0]), int(y[1]), v))
+
+        if test_no_obstacle(prox):
+            no_obstacle = True
+
+    await mc.node.set_variables(mc.motors(100, 100, v))
+    await mc.client.sleep(4)
+    await mc.node.set_variables(mc.motors(0, 0, v))
+
+    return
