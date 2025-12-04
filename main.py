@@ -369,7 +369,7 @@ async def main():
                     dx = target_pos[0] - pos_robot_est[0]
                     dy = target_pos[1] - pos_robot_est[1]
                     norm = np.linalg.norm([dx, dy])
-                    angle = -np.atan2(dy, dx)
+                    angle = -np.arctan2(dy, dx)
                     next_step = (norm, angle)
 
                     state = await mc.fsm(next_step, error_pos, state,v)
