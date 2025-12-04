@@ -114,8 +114,9 @@ def visualize_realtime(
                 cv2.circle(image_overlay, (x, y), 3, (0,165,255), -1)    # Intermediate
 
     # --- Draw measured pos ---
-    angle_offset = np.pi/2  # Adjust for image coordinate system
+    angle_offset = 0  # Adjust for image coordinate system
     if pos_measured_cm[0] is not None:
+        angle_vision_rad = -angle_vision_rad
         pos_meas_px = cm_to_px(pos_measured_cm, cm_to_pixel, image.shape[0])
 
         if (0 <= pos_meas_px[0] < image.shape[1] and 
@@ -144,6 +145,7 @@ def visualize_realtime(
 
     # --- Draw estimated pos ---
     if pos_estimated_cm[0] is not None:
+        angle_estimated_rad = -angle_estimated_rad
         pos_est_px = cm_to_px(pos_estimated_cm, cm_to_pixel, image.shape[0])
 
         if (0 <= pos_est_px[0] < image.shape[1] and 
@@ -236,7 +238,7 @@ async def main():
     global v, ekf, pos_est, P_est, pos_pred
     # threshold (cm) to consider the final goal reached
     GOAL_EPS_CM = 5.0
-    SKIP_STEPS =  3 
+    SKIP_STEPS =  15 
 
     try:        
         # Initialize variables for path visualization
@@ -284,7 +286,8 @@ async def main():
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
-                v.vision(5,50,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
+                v.flip()
+                v.vision(5,50,False,5)  #acquisition delay, white threshold, plot, P (pixels per cell)
                 v.plot_grid()
 
                 # si v est une instance de Vision et que v.vision(...) a été appelé
@@ -318,8 +321,8 @@ async def main():
                 
                 print("A* path length =", len(current_path)-1, "\n", current_path)
 
-                # gnav -> find the array of vectors (deplacement at step k)
-                # Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
+                #gnav -> find the array of vectors (deplacement at step k)
+                #Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
                 #Caution: theta is in radians AND relative to the origin and not between steps -> theta_k != theta_k+1 - theta_k
                 vector_path = gnav.vectors_for_displacement(current_path)
                 print("Vector path 0 (norm, angle):", vector_path)
@@ -339,7 +342,7 @@ async def main():
                     print("image size:", current_image.shape)
                 
                 if current_image is not None:
-                    # Get start position (cm), scale (pixels/cm) and start orientation (radians)
+                    #Get start position (cm), scale (pixels/cm) and start orientation (radians)
                     x_cm, y_cm, cm_to_pixel, _ = v.get_start_pos_and_cm_to_pixel(current_image)  
 
                     if cm_to_pixel is None:
@@ -374,7 +377,9 @@ async def main():
                 frame = v.get_cutted_frame(False, False)
                 #mc.v = v#copy the init vision into the motion control instance
                 mc.set_ekf_initial_state(v.get_thymio_pos_in_cm(frame))
-                _, _, _ = mc.update_filtering(v)
+                mc.was_still=False
+                mc.update_filtering(v)
+                mc.was_still=True
                 
             if state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
                 #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
@@ -385,26 +390,26 @@ async def main():
                 # Update filtering BEFORE using pos_est in this iteration
                 #update_filtering(mc)
 
-                #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
-                #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
-                # if pos_robot_vision[0] is None:#if kidnapped and it hides the   marker
-                #     print("Kidnapped during path following (due to no robot detection)")
-                #     state = State.KIDNAPPING
-                #     await mc.node.set_variables(mc.motors(0, 0,v))#stop the motors
-                #     just_changed_state = True
-                #     continue
+                
 
                 _ = v.get_image(False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)
                 angle_robot_vision = pos_robot_vision[2]
 
-                # Update the Kalman filter with current measurements
-                '''
-                pos_est = ekf.x_est
-                P_est = ekf.P_est
-                pos_pred = ekf.x_pred'''
 
+                #TODO: Do not go to kidnapping state if vision is done -> use EKF estimation instead
+                #TODO: go to kidnapping state only if both vision and motion control do not have a ground anymore
+                prox_gnd = list(mc.node["prox.ground.delta"])
+                print(f"Ground sensors: {prox_gnd}")
+                if pos_robot_vision[0] is None and max(prox_gnd) < 40:#if kidnapped and it hides the   marker
+                    print("Kidnapped during path following (due to no robot detection)")
+                    state = State.KIDNAPPING
+                    await mc.node.set_variables(mc.motors(0, 0,v))#stop the motors
+                    just_changed_state = True
+                    continue
+
+                # Update the Kalman filter with current measurements
                 pos_est = mc.pos_est
 
                 #pos_robot_est = pos_est[0], pos_est[1] 
@@ -451,7 +456,7 @@ async def main():
 
                     # If robot closer to goal than next step => go one step further
                     #print(f"Dist rob-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], robot_pos))} ; Dist target-goal = {np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos))}")
-                    '''while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_robot_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
+                    while np.linalg.norm(np.subtract(pos_to_goal[-1], pos_robot_est)) < np.linalg.norm(np.subtract(pos_to_goal[-1], target_pos)):
                         if step_count + 1 >= len(pos_to_goal):
                             print("overflow pos_to_goal")
                             break
@@ -459,7 +464,7 @@ async def main():
                             step_count += 1
                             target_pos = pos_to_goal[step_count]
                             print(f"Skip step {step_count - 1}")
-                            '''
+                            
 
                     dx = target_pos[0] - pos_robot_est[0]
                     dy = target_pos[1] - pos_robot_est[1]
@@ -471,6 +476,8 @@ async def main():
                     print(f"Step {step_count-1} (norm, angle): {next_step}")
                     #state = await mc.fsm(next_step, error_pos, state, angle_robot_est)
                     state = await mc.fsm(next_step, error_pos, state,v)
+                    print(f"0000000000000000000000 State after FSM: {state}")
+                    mc.was_still=True
 
                     #Check if waypoint is passed -> if it did -> step + 1
                     if(passed_way_point(pos_robot_est, target_pos, GOAL_EPS_CM)):
@@ -487,6 +494,10 @@ async def main():
                 print(f"Goal reached")
                 await mc.node.set_variables(mc.motors(0, 0,v))
                 cv2.destroyAllWindows()  # Fermer toutes les fenêtres OpenCV
+                
+                # Plot position comparison
+                plot_position_comparison(mc)
+                
                 break
 
                 # #Wait finish signal
@@ -504,6 +515,71 @@ Check if the robot has passed the waypoint within a certain threshold.
 def passed_way_point(robot_pos, way_point, threshold_cm):
     distance = np.linalg.norm(np.subtract(robot_pos, way_point))
     return distance < threshold_cm
+
+def plot_position_comparison(mc):
+    """
+    Plot comparison between measured positions (mc.plot_pos) and estimated positions (mc.plot_est_pos).
+    Creates 3 subplots: x position, y position, and angle over time.
+    Adds gray vertical bars when vision is lost/recovered.
+    
+    Args:
+        mc: Motion_control instance containing plot_pos and plot_est_pos arrays
+    """
+    if len(mc.plot_pos) == 0 or len(mc.plot_est_pos) == 0:
+        print("No position data to plot")
+        return
+    
+    # Convert lists to numpy arrays for easier manipulation
+    pos_measured = np.array(mc.plot_pos)  # Shape: (N, 3) where columns are [x, y, angle]
+    pos_estimated = np.array(mc.plot_est_pos)  # Shape: (M, 3)
+    pos_predicted = np.array(mc.plot_pred_pos)  # Shape: (K, 3)
+    
+    # Create figure with 3 subplots
+    fig, axes = plt.subplots(3, 1, figsize=(10, 10))
+    fig.suptitle('Position Comparison: Measured vs Estimated', fontsize=14)
+    
+    # Find transitions (vision lost/recovered) based on None values in pos_measured
+    vision_transitions = []
+    for i in range(1, len(pos_measured)):
+        curr_is_none = pos_measured[i][0] is None
+        prev_is_none = pos_measured[i-1][0] is None
+        if curr_is_none and not prev_is_none:
+            vision_transitions.append(i-1)  # Vision perdue à l'indice i
+        if not curr_is_none and prev_is_none:
+            vision_transitions.append(i)  # Vision retrouvée à l'indice i
+    
+    # Plot X position
+    axes[0].plot(range(len(pos_measured)), pos_measured[:, 0], 'b-', label='Measured X', linewidth=1.5)
+    axes[0].plot(range(len(pos_estimated)), pos_estimated[:, 0], 'r--', label='Estimated X', linewidth=1.5)
+    axes[0].plot(range(len(pos_predicted)), pos_predicted[:, 0], 'g-.', label='Predicted X', linewidth=1.5)
+    axes[0].set_ylabel('X Position (cm)', fontsize=11)
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+    
+    # Plot Y position
+    axes[1].plot(range(len(pos_measured)), pos_measured[:, 1], 'b-', label='Measured Y', linewidth=1.5)
+    axes[1].plot(range(len(pos_estimated)), pos_estimated[:, 1], 'r--', label='Estimated Y', linewidth=1.5)
+    axes[1].plot(range(len(pos_predicted)), pos_predicted[:, 1], 'g-.', label='Predicted Y', linewidth=1.5)
+    axes[1].set_ylabel('Y Position (cm)', fontsize=11)
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+    
+    # Plot Angle
+    axes[2].plot(range(len(pos_measured)), pos_measured[:, 2], 'b-', label='Measured Angle', linewidth=1.5)
+    axes[2].plot(range(len(pos_estimated)), pos_estimated[:, 2], 'r--', label='Estimated Angle', linewidth=1.5)
+    axes[2].plot(range(len(pos_predicted)), pos_predicted[:, 2], 'g-.', label='Predicted Angle', linewidth=1.5)
+    axes[2].set_ylabel('Angle (rad)', fontsize=11)
+    axes[2].set_xlabel('Index', fontsize=11)
+    axes[2].legend()
+    axes[2].grid(True, alpha=0.3)
+    
+    # Add gray vertical bars at vision transitions
+    for idx in vision_transitions:
+        for ax in axes:
+            ax.axvline(x=idx, color='gray', linestyle='--', alpha=0.5, linewidth=1.5)
+    
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
         asyncio.run(main())

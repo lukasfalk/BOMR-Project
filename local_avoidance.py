@@ -11,7 +11,7 @@ def test_no_obstacle(prox):
     global PROX_THR_LO
     return max(prox[:5]) < PROX_THR_LO
 
-async def avoid_obstacle(mc):
+async def avoid_obstacle(mc, v):
     print("Locale avoidance")
     no_obstacle = False
 
@@ -31,14 +31,14 @@ async def avoid_obstacle(mc):
         x = np.array(prox) // 100
         y = w @ x.T
 
-        await mc.node.set_variables(mc.motors(int(y[0]), int(y[1])))
+        await mc.node.set_variables(mc.motors(int(y[0]), int(y[1]), v))
 
         if test_no_obstacle(prox):
             no_obstacle = True
 
-    await mc.node.set_variables(mc.motors(100, 100))
+    await mc.node.set_variables(mc.motors(100, 100, v))
     await mc.client.sleep(4)
-    await mc.node.set_variables(mc.motors(0, 0))
+    await mc.node.set_variables(mc.motors(0, 0, v))
     print("End local avoidance")
 
     return
