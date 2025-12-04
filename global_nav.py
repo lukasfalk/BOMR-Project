@@ -27,10 +27,10 @@ class GlobalNavigation :
         self.Goal = row, col
         self.grid = vision.grid
         self.cell_size = vision.cell_size
-        self.thymio_size = 16
+        self.thymio_size = 8.0
 
         #Adapt thymio size for grid
-        self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) // 2 #np.ceil to take he superior int
+        self.robot_size = int(np.ceil(self.thymio_size / self.cell_size)) #np.ceil to take he superior int
 
     #Function to adapt the path for thymio robot dimension
     def growing_obstacles(self):
@@ -207,11 +207,10 @@ class GlobalNavigation :
         #Give an angle [-Pi, Pi] with arctan(theta) = y/x
         angles = np.arctan2(delta[:, 0], delta[:, 1]) 
 
-        # If cell_size is available, convert norms to cm
-        if hasattr(self, 'cell_size') and self.cell_size is not None:
-            norm_cm = norm * self.cell_size
-            vector = list(zip(norm_cm, angles))
-        else:
-            vector = list(zip(norm, angles))
-
+        #Convert norm in cm
+        norm_cm = norm * self.cell_size
+        
+        #Give back a vector with a tuple (norm, theta)
+        vector = list(zip(norm_cm, angles))
+   
         return vector 
