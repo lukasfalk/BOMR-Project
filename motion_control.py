@@ -11,7 +11,7 @@ from vision import Vision
 import time
 
 FORWARD_SPEED = 100
-GAIN_ANGLE = 60
+GAIN_ANGLE = 40
 GAIN_FWD = 5
 
 STEP_DT = 0.01
@@ -102,7 +102,7 @@ class Motion_control:
         step_count = 0
         
         #while step_count < target_dist_steps and abs(self.compute_error_angle(target_angle, self.angle)) > self.angle_epsilon:
-        while step_count < target_dist_steps and step_count < 15:
+        while step_count < target_dist_steps/5 and step_count < 20:
             if test_obstacle_detected(list(self.node["prox.horizontal"])):
                 await self.node.set_variables(self.motors(0, 0,v))
                 return
@@ -126,7 +126,7 @@ class Motion_control:
 
             await self.node.set_variables(self.motors(left_speed, right_speed,v))
             
-            #await self.client.sleep(STEP_DT)
+            await self.client.sleep(STEP_DT)
             
             step_count += 1
 
