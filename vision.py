@@ -103,7 +103,6 @@ class Vision:
         cv2.destroyAllWindows()
 
     def plot_grid(self,half_size=0):
-        print(f"Grid sizeY = {self.grid.shape[0]}, grid sizeX = {self.grid.shape[1]}")
         #Reconstruction to visualize the grid
         image_cropped = np.zeros((self.grid.shape[0], self.grid.shape[1], 3), dtype=np.uint8)
 
@@ -304,7 +303,7 @@ class Vision:
                 pixel_width = np.linalg.norm(pts[0] - pts[1])
                 pixel_height = np.linalg.norm(pts[1] - pts[2])
                 #to test if distortion
-                print(f"ArUco {i[0]}: largeur={pixel_width:.1f}px, hauteur={pixel_height:.1f}px")
+                #print(f"ArUco {i[0]}: largeur={pixel_width:.1f}px, hauteur={pixel_height:.1f}px")
                 aruco_pixel_sizes_after.append((pixel_width + pixel_height) / 2)
 
         aruco_pixel_size_after = np.mean(aruco_pixel_sizes_after) if len(aruco_pixel_sizes_after) > 0 else 0.0

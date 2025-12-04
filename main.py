@@ -242,12 +242,11 @@ async def main():
                     just_changed_state = True
 
             if state == State.GRID_CREATION:
-                print("Grid Creation")
-                v.vision(5,50,True,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
-                v.plot_grid()
+                v.vision(5,60,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
+                #v.plot_grid()
 
                 #Plot the grid on a frame
-                v.overlay_grid_on_cropped()
+                #v.overlay_grid_on_cropped()
                  
                 gnav.set_gnav(v)
                 current_path, explored = gnav.grid_search()
@@ -271,8 +270,8 @@ async def main():
                 #Convert tuple to numpy array for the Kalman filter
                 pos_est = np.array(pos_est_tuple)
 
-                gnav.display_grid_with_path(current_path)
-                gnav.display_colored_grid()
+                #gnav.display_grid_with_path(current_path)
+                #gnav.display_colored_grid()
 
                 #gnav -> find the array of vectors (deplacement at step k)
                 #Example: current_path = [(norm1, theta1), (norm2, theta2), ...] representing each displacement
@@ -312,7 +311,6 @@ async def main():
                     pos_to_goal.append((x, y))
                 state = State.GLOBAL_NAVIGATION
                 just_changed_state = True
-                print(f"Pos to goal = {pos_to_goal}")
 
                 target_pos = None
                 error_pos = 0

@@ -37,5 +37,6 @@ async def avoid_obstacle(mc, v):
     await mc.node.set_variables(mc.motors(100, 100, v))
     await mc.client.sleep(4)
     await mc.node.set_variables(mc.motors(0, 0, v))
+    mc.was_still = True
 
     return

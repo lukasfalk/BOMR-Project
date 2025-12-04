@@ -36,9 +36,6 @@ class GlobalNavigation :
     def growing_obstacles(self):
         
         modified_grid = np.copy(self.grid)
-        
-        print(len(self.grid))
-        print(len(self.grid[0]))
 
         for i in range(len(self.grid)):
             for j in range(len(self.grid[0])):

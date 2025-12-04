@@ -13,6 +13,8 @@ FORWARD_SPEED = 100
 GAIN_ANGLE = 40
 GAIN_FWD = 5
 
+STEP_DT = 0.01
+
 KIDNAPPING_THR = 40
 
 class Motion_control:
@@ -98,6 +100,13 @@ class Motion_control:
             if test_obstacle_detected(list(self.node["prox.horizontal"])):
                 await self.node.set_variables(self.motors(0, 0,v))
                 return
+            
+            if self.test_kidnapping(list(self.node["prox.ground.delta"])):
+                self.state = "KIDNAPPED"
+                print("Kidnapping detected during path following")
+                await self.node.set_variables(self.motors(0, 0,v))
+                self.was_still = True
+                break
 
             error_angle = self.compute_error_angle(target_angle, self.angle)
 
