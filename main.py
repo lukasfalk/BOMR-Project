@@ -59,94 +59,144 @@ def calculate_path_positions(displacements, start_pos_cm):
     
     return positions
 
-def visualize_realtime(image, global_path_displacements, start_pos_cm, cm_to_pixel, pos_measured_cm, pos_estimated_cm=(10, 10)):
+import cv2
+import numpy as np
+
+def cm_to_px(pos_cm, cm_to_pixel, image_height):
+    """Convert a position in cm to pixel coordinates."""
+    x_px = int(pos_cm[0] * cm_to_pixel)
+    y_px = int(image_height - pos_cm[1] * cm_to_pixel)
+    return (x_px, y_px)
+
+
+def visualize_realtime(
+    image,
+    global_path_displacements,
+    start_pos_cm,
+    cm_to_pixel,
+    pos_measured_cm,
+    pos_estimated_cm=(10, 10),
+    angle_estimated_rad=None,
+    angle_vision_rad=None
+):
     """
-    Display real-time view of camera with global path and two positions
-    
-    Args:
-        image: The cropped camera image (BGR format)
-        global_path_displacements: List of displacement vectors [(norm1, angle1), (norm2, angle2), ...]
-                                   where norm is in cm and angle is in radians (angles should be INVERTED for display)
-        start_pos_cm: Starting position (x, y) in cm
-        cm_to_pixel: Conversion factor from cm to pixels (pixels per cm)
-        pos_measured_cm: Position measured with get_thymio_pos_cm (x, y) in cm
-        pos_estimated_cm: Second position (x, y) in cm (default (10, 10))
-    
-    Returns:
-        image_with_overlay: Image with path and positions drawn
+    Display real-time view of camera with global path and two positions.
+    Displays both estimated angle and vision angle.
     """
+
     image_overlay = image.copy()
-    
-    # Calculate path positions from displacements using the helper function
+
+    # --- Compute path positions (same as before) ---
     path_positions = calculate_path_positions(global_path_displacements, start_pos_cm)
-    
-    # Convert path positions from cm to pixels
-    def cm_to_px(pos_cm):
-        x_px = int(pos_cm[0] * cm_to_pixel)
-        y_px = int(image.shape[0] - pos_cm[1] * cm_to_pixel)
-        return (x_px, y_px)
-    
-    path_positions_px = [cm_to_px(pos) for pos in path_positions]
-    
-    # Draw global path
+
+    # Convert path positions to pixels
+    path_positions_px = [
+        cm_to_px(pos, cm_to_pixel, image.shape[0]) for pos in path_positions
+    ]
+
+    # --- Draw global path ---
     for i in range(len(path_positions_px) - 1):
         x1, y1 = path_positions_px[i]
         x2, y2 = path_positions_px[i+1]
-        
+
         if (0 <= x1 < image.shape[1] and 0 <= y1 < image.shape[0] and
             0 <= x2 < image.shape[1] and 0 <= y2 < image.shape[0]):
-            cv2.line(image_overlay, (x1, y1), (x2, y2), (0, 165, 255), 2)  # Orange path
-    
-    # Draw path waypoints
+            cv2.line(image_overlay, (x1, y1), (x2, y2), (0,165,255), 2)
+
+    # --- Draw path waypoints ---
     for i, (x, y) in enumerate(path_positions_px):
         if 0 <= x < image.shape[1] and 0 <= y < image.shape[0]:
-            if i == 0:  # Start -> green
-                cv2.circle(image_overlay, (x, y), 6, (0, 255, 0), -1)
-            elif i == len(path_positions_px) - 1:  # Goal -> blue
-                cv2.circle(image_overlay, (x, y), 6, (255, 0, 0), -1)
-            else:  # Intermediate waypoints -> small orange circles
-                cv2.circle(image_overlay, (x, y), 3, (0, 165, 255), -1)
-    
-    # Draw measured position (red circle with cross)
-    if pos_measured_cm[0] is not None and pos_measured_cm[1] is not None:
-        pos_measured_px = cm_to_px(pos_measured_cm)
-        if (0 <= pos_measured_px[0] < image.shape[1] and 
-            0 <= pos_measured_px[1] < image.shape[0]):
-            cv2.circle(image_overlay, pos_measured_px, 8, (0, 0, 255), 2)  # Red circle
-            cv2.drawMarker(image_overlay, pos_measured_px, (0, 0, 255), 
-                          cv2.MARKER_CROSS, 12, 2)  # Red cross
-    
-    # Draw estimated position (cyan circle with cross)
-    if pos_estimated_cm[0] is not None and pos_estimated_cm[1] is not None:
-        pos_estimated_px = cm_to_px(pos_estimated_cm)
-        if (0 <= pos_estimated_px[0] < image.shape[1] and 
-            0 <= pos_estimated_px[1] < image.shape[0]):
-            cv2.circle(image_overlay, pos_estimated_px, 8, (255, 255, 0), 2)  # Cyan circle
-            cv2.drawMarker(image_overlay, pos_estimated_px, (255, 255, 0), 
-                          cv2.MARKER_CROSS, 12, 2)  # Cyan cross
-    
-    # Add legend
+            if i == 0:
+                cv2.circle(image_overlay, (x, y), 6, (0,255,0), -1)       # Start
+            elif i == len(path_positions_px) - 1:
+                cv2.circle(image_overlay, (x, y), 6, (255,0,0), -1)      # Goal
+            else:
+                cv2.circle(image_overlay, (x, y), 3, (0,165,255), -1)    # Intermediate
+
+    # --- Draw measured pos ---
+    angle_offset = np.pi/2  # Adjust for image coordinate system
+    if pos_measured_cm[0] is not None:
+        pos_meas_px = cm_to_px(pos_measured_cm, cm_to_pixel, image.shape[0])
+
+        if (0 <= pos_meas_px[0] < image.shape[1] and 
+            0 <= pos_meas_px[1] < image.shape[0]):
+
+            cv2.circle(image_overlay, pos_meas_px, 8, (0,0,255), 2)
+            cv2.drawMarker(image_overlay, pos_meas_px, (0,0,255),
+                           cv2.MARKER_CROSS, 12, 2)
+            
+            # ===== Draw vision angle arrow =====
+            if angle_vision_rad is not None:
+                arrow_length_cm = 5  # length in cm
+                arrow_length_px = int(arrow_length_cm * cm_to_pixel)
+
+                x_end = int(pos_meas_px[0] + arrow_length_px * np.cos(angle_vision_rad+angle_offset))
+                y_end = int(pos_meas_px[1] - arrow_length_px * np.sin(angle_vision_rad+angle_offset))
+
+                cv2.arrowedLine(
+                    image_overlay,
+                    pos_meas_px,
+                    (x_end, y_end),
+                    (0,0,255),  # red arrow for vision angle
+                    2,
+                    tipLength=0.3
+                )
+
+    # --- Draw estimated pos ---
+    if pos_estimated_cm[0] is not None:
+        pos_est_px = cm_to_px(pos_estimated_cm, cm_to_pixel, image.shape[0])
+
+        if (0 <= pos_est_px[0] < image.shape[1] and 
+            0 <= pos_est_px[1] < image.shape[0]):
+
+            cv2.circle(image_overlay, pos_est_px, 8, (255,255,0), 2)
+            cv2.drawMarker(image_overlay, pos_est_px, (255,255,0),
+                           cv2.MARKER_CROSS, 12, 2)
+
+            # ===== Draw heading arrow =====
+            if angle_estimated_rad is not None:
+                arrow_length_cm = 5  # length in cm
+                arrow_length_px = int(arrow_length_cm * cm_to_pixel)
+
+                x_end = int(pos_est_px[0] + arrow_length_px * np.cos(angle_estimated_rad+angle_offset))
+                y_end = int(pos_est_px[1] - arrow_length_px * np.sin(angle_estimated_rad+angle_offset))
+
+                cv2.arrowedLine(
+                    image_overlay,
+                    pos_est_px,
+                    (x_end, y_end),
+                    (255,255,0),  # yellow arrow for estimated angle
+                    2,
+                    tipLength=0.3
+                )
+
+    # --- Legend (unchanged) ---
     legend_y = 30
-    cv2.putText(image_overlay, "Legend:", (10, legend_y), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    cv2.circle(image_overlay, (20, legend_y + 25), 5, (0, 255, 0), -1)
-    cv2.putText(image_overlay, "Start", (35, legend_y + 30), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    cv2.circle(image_overlay, (20, legend_y + 50), 5, (255, 0, 0), -1)
-    cv2.putText(image_overlay, "Goal", (35, legend_y + 55), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    cv2.circle(image_overlay, (20, legend_y + 75), 5, (0, 165, 255), -1)
-    cv2.putText(image_overlay, "Path", (35, legend_y + 80), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    cv2.drawMarker(image_overlay, (20, legend_y + 100), (0, 0, 255), 
+    cv2.putText(image_overlay, "Legend:", (10, legend_y),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
+
+    cv2.circle(image_overlay, (20, legend_y + 25), 5, (0,255,0), -1)
+    cv2.putText(image_overlay, "Start", (35, legend_y + 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+
+    cv2.circle(image_overlay, (20, legend_y + 50), 5, (255,0,0), -1)
+    cv2.putText(image_overlay, "Goal", (35, legend_y + 55),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+
+    cv2.circle(image_overlay, (20, legend_y + 75), 5, (0,165,255), -1)
+    cv2.putText(image_overlay, "Path", (35, legend_y + 80),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+
+    cv2.drawMarker(image_overlay, (20, legend_y + 100), (0,0,255),
                    cv2.MARKER_CROSS, 8, 2)
-    cv2.putText(image_overlay, "Measured", (35, legend_y + 105), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    cv2.drawMarker(image_overlay, (20, legend_y + 125), (255, 255, 0), 
+    cv2.putText(image_overlay, "Measured", (35, legend_y + 105),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+
+    cv2.drawMarker(image_overlay, (20, legend_y + 125), (255,255,0),
                    cv2.MARKER_CROSS, 8, 2)
-    cv2.putText(image_overlay, "Estimated", (35, legend_y + 130), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    
+    cv2.putText(image_overlay, "Estimated", (35, legend_y + 130),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+
     return image_overlay
 
 def distance_directe(path: Iterable[Tuple[float, float]], degrees: bool = False) -> float:
@@ -234,7 +284,7 @@ async def main():
 
             if state == State.GRID_CREATION:
                 print("Grid Creation")
-                v.vision(5,20,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
+                v.vision(5,50,False,10)  #acquisition delay, white threshold, plot, P (pixels per cell)
                 v.plot_grid()
 
                 # si v est une instance de Vision et que v.vision(...) a été appelé
@@ -346,7 +396,8 @@ async def main():
 
                 _ = v.get_image(False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
-                pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
+                pos_robot_vision = v.get_thymio_pos_in_cm(frame)
+                angle_robot_vision = pos_robot_vision[2]
 
                 # Update the Kalman filter with current measurements
                 '''
@@ -357,8 +408,9 @@ async def main():
                 pos_est = mc.pos_est
 
                 #pos_robot_est = pos_est[0], pos_est[1] 
-                pos_est2 = mc.ekf.x_est#To kick -> for testing otherwise PUT pos_est from mc
-                pos_robot_est = pos_est2[0], pos_est2[1] 
+                #pos_est2 = mc.ekf.x_est#To kick -> for testing otherwise PUT pos_est from mc
+                #pos_robot_est = pos_est2[0], pos_est2[1] 
+                pos_robot_est = pos_est[0], pos_est[1]
                 angle_robot_est =  pos_est[2] 
                 
                 # if visualizing_counter >= 2:
@@ -371,7 +423,8 @@ async def main():
                 # else:
                 #     visualizing_counter += 1
                 realtime_image = visualize_realtime(frame, vector_path_inversed, start_pos, 
-                                                    cm_to_pixel_global, pos_robot_vision, pos_robot_est)
+                                                    cm_to_pixel_global, pos_robot_vision[:2], 
+                                                    pos_robot_est, angle_robot_est, angle_robot_vision)
                 cv2.imshow("Real-time Navigation View", realtime_image)
                 if pos_robot_vision[0] is None:
                     cv2.waitKey(20)  # Afficher pendant 20ms pour permettre la mise à jour

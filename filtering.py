@@ -58,7 +58,10 @@ class Filtering :
                         self.x_prev[1] + (self.v / self.omega) * (-np.cos(self.x_prev[2] + self.omega * self.Ts) + np.cos(self.x_prev[2])),
                         self.wrap_angle(self.x_prev[2] + self.omega * self.Ts)])
 
+        if abs(self.x_pred[2] - self.x_prev[2]) > (1/6)*np.pi: #
+            self.x_pred[2] = self.wrap_angle(self.x_prev[2])
         F = self.state_transition_jacobian()
+
         self.P_pred = F @ self.P_prev @ F.T + self.Q
 
     def update_state_est(self, z: np.ndarray):
