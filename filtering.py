@@ -18,7 +18,7 @@ class Filtering :
         # Noise
         self.var_v_left = 0.4 #3.8 #2.853437746116455
         self.var_v_right = 0.4 #3.8 #5.5411623536575645
-        self.Q = np.diag([self.var_v_left**2, self.var_v_right**2, 0.01]) # Process noise covariance
+        self.Q = np.diag([self.var_v_left**2, self.var_v_right**2, 100]) # Process noise covariance
         self.R = np.diag([0.00001**2, 0.00001**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
 
         self.x_est = np.zeros(3) #Initial estimation for states
