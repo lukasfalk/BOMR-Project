@@ -18,6 +18,10 @@ in pixels:
     - x axis -> right
     - y axis -> down
 
+Origin:
+top right corner -> id 2
+bottom left corner -> id 0
+
 REMARK: Depending on your computer you could need to change the camera opening line: self.__cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
 
 '''
@@ -46,6 +50,8 @@ class Vision:
 
         #Force the orientation to 0
         self.__cap.set(cv2.CAP_PROP_ORIENTATION_META, 0) 
+
+        self.rotation=0
 
         if not self.__cap.isOpened():
             raise Exception("Unable to open the camera")
@@ -112,6 +118,17 @@ class Vision:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
             print("frame.shape:", frame.shape)
+
+        
+        rotation_map = {
+        0: None,
+        90: cv2.ROTATE_90_CLOCKWISE,
+        180: cv2.ROTATE_180,
+        270: cv2.ROTATE_90_COUNTERCLOCKWISE
+        }
+
+        if self.rotation != 0:
+            frame = cv2.rotate(frame, rotation_map[self.rotation])
 
         return frame
     
@@ -243,12 +260,11 @@ class Vision:
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()
 
-        #id 0 is top left and id 2 is bottom right
+        #id 0 should be bottom-left and id 2 should be top-right
         #Detection of the "box" + calculation of the cell size        
         aruco_pixel_sizes = []
 
-        centers_2pts=np.zeros((2,2))
-        id_to_idx = {0: 0, 2: 1} #since i can go to n (n being number of arucos)
+        centers_dict = {}
         for c, i in zip(corners, ids):
             pts = c[0]  # shape (4,2)
 
@@ -259,7 +275,7 @@ class Vision:
 
             if i in [0, 2]:
                 center = c[0].mean(axis=0)
-                centers_2pts[id_to_idx[int(i)]] = center
+                centers_dict[int(i)] = center
 
         #Average pixel size of all detected ArUcos
         aruco_pixel_size_before = np.mean(aruco_pixel_sizes)
@@ -267,13 +283,40 @@ class Vision:
         #Conversion ratio
         self.__cm_per_pixel_before = self._aruco_real_size_cm/aruco_pixel_size_before
 
-        top_right = [centers_2pts[0][0],centers_2pts[1][1]]
-        bottom_left = [centers_2pts[1][0],centers_2pts[0][1]]
+        # Ensure ArUco 0 is at bottom-left and ArUco 2 is at top-right
+        # We need to determine which one is actually bottom-left vs top-right
+        center_0 = centers_dict[0]
+        center_2 = centers_dict[2]
+        
+        # Determine which center should be bottom-left (min x, max y) and top-right (max x, min y)
+        # Compare both centers to determine orientation
+        if center_0[0] < center_2[0] and center_0[1] > center_2[1]:
+            # ArUco 0 is correctly bottom-left, ArUco 2 is top-right
+            bottom_left_center = center_0
+            top_right_center = center_2
+        elif center_0[0] > center_2[0] and center_0[1] < center_2[1]:
+            # ArUco 0 is actually top-right, ArUco 2 is bottom-left (flipped)
+            bottom_left_center = center_2
+            top_right_center = center_0
+        else:
+            # Ambiguous or invalid configuration, use original assumption
+            print("Warning: ArUco 0 and 2 positioning is ambiguous, using default")
+            bottom_left_center = center_0
+            top_right_center = center_2
+        
+        # Build the 4 corners of the rectangle: [top-left, top-right, bottom-right, bottom-left]
+        # top-left: min x, min y
+        # top-right: max x, min y
+        # bottom-right: max x, max y
+        # bottom-left: min x, max y
+        top_left = np.array([bottom_left_center[0], top_right_center[1]])
+        top_right = top_right_center
+        bottom_right = np.array([top_right_center[0], bottom_left_center[1]])
+        bottom_left = bottom_left_center
 
         #[top-left, top-right, bottom-right, bottom-left]
-        centers = np.array([centers_2pts[0], top_right, centers_2pts[1], bottom_left], dtype=np.float32)
+        centers = np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
 
-        centers = np.array(centers, dtype=np.float32)
         cropped_frame,M = self.cut_from_aruco(frame,centers)
 
         start_end=np.zeros((2,2))
@@ -342,21 +385,24 @@ class Vision:
     '''
     def cut_from_aruco(self,frame,centers):
 
-        #Minimal rectangle around the centers
-        rect = cv2.minAreaRect(centers)     #(center,(w,h),angle)
-        box = cv2.boxPoints(rect)           #4 corners
-        box = box.astype(np.float32) 
-
+        # centers is already ordered as [top-left, top-right, bottom-right, bottom-left]
+        # Use these points directly instead of minAreaRect to preserve order
+        
         #Calculate actual distances between corners to preserve aspect ratio
-        self._w = int(np.round(np.linalg.norm(box[1] - box[0])))
-        self._h = int(np.round(np.linalg.norm(box[2] - box[1])))
+        # Width: distance from top-left to top-right
+        self._w = int(np.round(np.linalg.norm(centers[1] - centers[0])))
+        # Height: distance from top-left to bottom-left
+        self._h = int(np.round(np.linalg.norm(centers[3] - centers[0])))
 
         if self._w == 0 or self._h == 0:
             print("Invalid rectangle dimensions for cropping.")
             return None
 
+        # Destination points in the same order: [top-left, top-right, bottom-right, bottom-left]
         dst_pts = np.array([[0,0],[self._w,0],[self._w,self._h],[0,self._h]], dtype="float32")
-        self._M = cv2.getPerspectiveTransform(box.astype("float32"), dst_pts)
+        
+        # Use the ordered centers directly for transformation
+        self._M = cv2.getPerspectiveTransform(centers, dst_pts)
         cropped_frame = cv2.warpPerspective(frame, self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)#Apply borderMode to reduce distortion at the edges (should not been used)
         return cropped_frame,self._M
 
@@ -708,6 +754,35 @@ class Vision:
         print("Aruco id 1 (start) not detected in frame")
         #Return None for position and orientation but cm_to_pixel if available
         return None, None, cm_to_pixel, None
+    
+    def flip(self):
+        """
+        Interactive function to rotate an image by 90° increments.
+        Shows the cropped image and asks user if they want to flip it.
+        Press 'y' to rotate 90°, any other key to stop.
+        
+        Returns:
+            None (stores rotation in self.rotation)
+        """
+        rotation_count = 0  # Number of 90° rotations applied
+        current_image = self.get_cutted_frame(plot=False)
+        
+        while True:
+            # Display the current image
+            cv2.imshow("Flip - Press 'y' to rotate 90°, any other key to finish", current_image)
+            
+            key = cv2.waitKey(0)
+            
+            if key == ord('y') or key == ord('Y'):
+                # Rotate 90° clockwise
+                rotation_count += 1
+                current_image = cv2.rotate(current_image, cv2.ROTATE_90_CLOCKWISE)
+            else:
+                # User is done
+                cv2.destroyAllWindows()
+                break
+        
+        self.rotation = (rotation_count * 90) % 360
 
 #test
 

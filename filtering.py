@@ -13,11 +13,11 @@ class Filtering :
         self.interwheel_distance = 11 # [cm] Distance between the wheels
         # Q = np.diag([10, 10, 10])  # Process noise covariance
         
-        self.thymio_speed_to_ms = 0.3846153846153846 / 1 # m/s conversion factor
+        self.thymio_speed_to_ms = 0.3146153846153846 / 1 # m/s conversion factor
 
         # Noise
-        self.var_v_left = 0.4 #3.8 #2.853437746116455
-        self.var_v_right = 0.4 #3.8 #5.5411623536575645
+        self.var_v_left = 0.1#0.4 #3.8 #2.853437746116455
+        self.var_v_right = 0.1#0.4 #3.8 #5.5411623536575645
         self.Q = np.diag([self.var_v_left**2, self.var_v_right**2, 0.01]) # Process noise covariance
         self.R = np.diag([0.00001**2, 0.00001**2, (np.deg2rad(5))**2]) # Vision measurement noise covariance
 
@@ -37,9 +37,11 @@ class Filtering :
         return (theta + np.pi) % (2*np.pi) - np.pi
 
     def state_transition_jacobian(self):
-        ''' Compute the derived Jacobian of the state space model'''
-        return np.array([[1, 0, -self.v * np.sin(self.x_prev[2]) * self.Ts],
-                         [0, 1,  self.v * np.cos(self.x_prev[2]) * self.Ts],
+        ''' Compute the derived Jacobian of the state space model
+        Note: angle is negated because vision uses image coordinates (Y down)
+        while our reference frame has Y up (origin bottom-left)'''
+        return np.array([[1, 0, -self.v * np.sin(-self.x_prev[2]) * self.Ts],
+                         [0, 1,  self.v * np.cos(-self.x_prev[2]) * self.Ts],
                          [0, 0, 1]])
 
     def predict_state_est(self):
@@ -48,17 +50,24 @@ class Filtering :
         #self.x_prev[2] is theta the angle
 
         if abs(self.omega) < 1e-9:
+            # Angle negated for image coordinate system (Y down in images vs Y up in our frame)
             self.x_pred = np.array([
-                        self.x_prev[0] + self.v * np.cos(self.x_prev[2]) * self.Ts,
-                        self.x_prev[1] + self.v * np.sin(self.x_prev[2]) * self.Ts,
+                        self.x_prev[0] + self.v * np.cos(-self.x_prev[2]) * self.Ts,
+                        self.x_prev[1] + self.v * np.sin(-self.x_prev[2]) * self.Ts,
                         self.wrap_angle(self.x_prev[2] + self.omega * self.Ts)])
         else:
+            # Angle negated for image coordinate system (Y down in images vs Y up in our frame)
+            theta_neg = -self.x_prev[2]
             self.x_pred = np.array([
-                        self.x_prev[0] + (self.v / self.omega) * (np.sin(self.x_prev[2] + self.omega * self.Ts) - np.sin(self.x_prev[2])),
-                        self.x_prev[1] + (self.v / self.omega) * (-np.cos(self.x_prev[2] + self.omega * self.Ts) + np.cos(self.x_prev[2])),
+                        self.x_prev[0] + (self.v / self.omega) * (np.sin(theta_neg + self.omega * self.Ts) - np.sin(theta_neg)),
+                        self.x_prev[1] + (self.v / self.omega) * (-np.cos(theta_neg + self.omega * self.Ts) + np.cos(theta_neg)),
                         self.wrap_angle(self.x_prev[2] + self.omega * self.Ts)])
 
+        '''
+        if abs(self.x_pred[2] - self.x_prev[2]) > (1/6)*np.pi: #
+            self.x_pred[2] = self.wrap_angle(self.x_prev[2])'''
         F = self.state_transition_jacobian()
+
         self.P_pred = F @ self.P_prev @ F.T + self.Q
 
     def update_state_est(self, z: np.ndarray):
@@ -83,15 +92,20 @@ class Filtering :
         self.x_est = given_x_est
         self.P_est = given_P_est
 
-        left_speed = (left_speed - 5) * self.thymio_speed_to_ms
+        #left_speed = (left_speed - 5) * self.thymio_speed_to_ms
+        left_speed = (left_speed) * self.thymio_speed_to_ms
         right_speed *= self.thymio_speed_to_ms
 
         self.x_prev = self.x_est
         self.P_prev = self.P_est
 
-        
+        '''
         self.v     = (left_speed  + right_speed) / 2 # Average speed
         self.omega = (right_speed - left_speed) / self.interwheel_distance  # Angular velocity
+        '''
+        self.v     = (right_speed  + left_speed) / 2 # Average speed
+        self.omega = (left_speed - right_speed) / self.interwheel_distance  # Angular velocity
+        
 
         # Prediction step
         self.predict_state_est()
@@ -101,6 +115,7 @@ class Filtering :
             self.update_state_est(z)
         else:
             # No measurement update. Estimated states are the predicted states
+            print(f"Measurement update without z = {z}")
             self.x_est = self.x_pred
             self.P_est = self.P_pred
 
