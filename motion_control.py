@@ -36,6 +36,13 @@ class Motion_control:
         self.delta_t_filter = None
         self.first_call = True
         self.camera_ok = True#Passed to False if we lose the camera
+        self.was_still=True
+        self.plot_est_pos=[]
+        self.plot_pos=[]
+        self.plot_pred_pos=[]
+        self.plot_l_speed=[]
+        self.plot_r_speed=[]
+        self.plot_camera_ok=[]
         #self.v = Vision()
 
     @classmethod
@@ -72,6 +79,7 @@ class Motion_control:
         prox_gnd = list(self.node["prox.ground.delta"])
 
         if self.test_kidnapping(prox_gnd):
+            print(" ===============000 KIDNAPPING TEST TRUE")
             self.state = "KIDNAPPED"
             return
         elif test_no_obstacle(prox_h) and self.state != "MOVE":
@@ -82,7 +90,7 @@ class Motion_control:
 
     def test_kidnapping(self, prox):
         global KIDNAPPING_THR
-        return max(prox) < KIDNAPPING_THR and not self.visible
+        return max(prox) < KIDNAPPING_THR
 
     async def follow_instruction(self, path, error_pos,v):
         await self.path_following(path, error_pos,v)
@@ -94,7 +102,7 @@ class Motion_control:
         step_count = 0
         
         #while step_count < target_dist_steps and abs(self.compute_error_angle(target_angle, self.angle)) > self.angle_epsilon:
-        while step_count < target_dist_steps:
+        while step_count < target_dist_steps and step_count < 15:
             if test_obstacle_detected(list(self.node["prox.horizontal"])):
                 await self.node.set_variables(self.motors(0, 0,v))
                 return
@@ -147,10 +155,11 @@ class Motion_control:
         self.update_state()
         if self.state == "KIDNAPPED":
             await self.node.set_variables(self.motors(0, 0,v))
+            print("KIDNAPPING DETECTED")
             return s.KIDNAPPING
         
         elif self.state == "OBSTACLE":
-            await avoid_obstacle(self)
+            await avoid_obstacle(self, v)
             return s.OBS_AVOIDED
         
         else:
@@ -162,13 +171,15 @@ class Motion_control:
         #print the difference in time between two calls
         
         current_time = time.time()
-        #if self.last_time_filter is None:
-            #print("First filtering call - initializing time")
+        if self.was_still is True:
+            self.was_still=False
+            print("First filtering call - initializing time")
+            return self.pos_est, self.P_est, self.pos_pred
         #else:
         if self.last_time_filter is not None:
             self.delta_t_filter = current_time - self.last_time_filter
             print(f"------ Time since last filtering call: {self.delta_t_filter:.3f} seconds")
-            self.ekf.set_Ts(self.delta_t_filter/2)
+            self.ekf.set_Ts(self.delta_t_filter)
         self.last_time_filter = current_time
         
 
@@ -189,9 +200,8 @@ class Motion_control:
         # if self.first_call == False:#To kick -> for testing
         #     print("In first truc")
         #     pos_vision = (None, None, None)
+        print("==============Position vision:", pos_vision)
         self.pos_est, self.P_est, self.pos_pred = self.ekf.extended_kalman_filter(self.pos_est, self.P_est, l, r, pos_vision)
-        #self.first_call = False#To kick -> for testing
-        #self.pos_est = v.get_thymio_pos_in_cm(frame)#To kick -> for testing
         
         x_abs, y_abs, robot_angle = v.get_thymio_pos_in_cm(frame)
         if x_abs is not None and y_abs is not None and robot_angle is not None:
@@ -203,12 +213,20 @@ class Motion_control:
             print(f"Abs angle = {robot_angle}; Estimated angle = {self.pos_est[2]}")
         else:
             print(f"Abs angle = None (not detected); Estimated angle = {self.pos_est[2]}")
+
+        self.plot_est_pos.append(self.pos_est)
         if robot_angle is not None:
             self.camera_ok = True
             self.angle = robot_angle
+            self.pos_est = pos_vision
         else:
             self.camera_ok = False
             self.angle = self.pos_est[2]
-        return self.pos_est, self.P_est, self.pos_pred
+
+        self.plot_l_speed.append(l)
+        self.plot_r_speed.append(r)
+        self.plot_pos.append(pos_vision)
+        self.plot_pred_pos.append(self.pos_pred)
+        self.plot_camera_ok.append(self.camera_ok)
 
 
