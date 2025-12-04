@@ -59,21 +59,24 @@ def calculate_path_positions(displacements, start_pos_cm):
     
     return positions
 
-def visualize_realtime(image, global_path_displacements, start_pos_cm, cm_to_pixel, pos_measured_cm, pos_estimated_cm=(10, 10)):
+def visualize_realtime(image, global_path_displacements, start_pos_cm, cm_to_pixel, 
+                       pos_measured_cm, pos_estimated_cm=(10, 10), 
+                       angle_measured=None, angle_estimated=None):
     """
-    Display real-time view of camera with global path and two positions
+    Display real-time view of camera with global path, two positions, and orientation arrows.
     
     Args:
         image: The cropped camera image (BGR format)
-        global_path_displacements: List of displacement vectors [(norm1, angle1), (norm2, angle2), ...]
-                                   where norm is in cm and angle is in radians (angles should be INVERTED for display)
+        global_path_displacements: List of displacement vectors [(norm1, angle1), ...]
         start_pos_cm: Starting position (x, y) in cm
         cm_to_pixel: Conversion factor from cm to pixels (pixels per cm)
         pos_measured_cm: Position measured with get_thymio_pos_cm (x, y) in cm
         pos_estimated_cm: Second position (x, y) in cm (default (10, 10))
+        angle_measured: Orientation of the measured robot in radians (default None)
+        angle_estimated: Orientation of the estimated robot in radians (default None)
     
     Returns:
-        image_with_overlay: Image with path and positions drawn
+        image_with_overlay: Image with path, positions, and angles drawn
     """
     image_overlay = image.copy()
     
@@ -107,23 +110,45 @@ def visualize_realtime(image, global_path_displacements, start_pos_cm, cm_to_pix
             else:  # Intermediate waypoints -> small orange circles
                 cv2.circle(image_overlay, (x, y), 3, (0, 165, 255), -1)
     
-    # Draw measured position (red circle with cross)
+    arrow_length = 25  # Length of the orientation arrow in pixels
+
+    # Draw measured position (red circle with cross and arrow)
     if pos_measured_cm[0] is not None and pos_measured_cm[1] is not None:
         pos_measured_px = cm_to_px(pos_measured_cm)
         if (0 <= pos_measured_px[0] < image.shape[1] and 
             0 <= pos_measured_px[1] < image.shape[0]):
+            
+            # Draw Marker
             cv2.circle(image_overlay, pos_measured_px, 8, (0, 0, 255), 2)  # Red circle
             cv2.drawMarker(image_overlay, pos_measured_px, (0, 0, 255), 
-                          cv2.MARKER_CROSS, 12, 2)  # Red cross
+                           cv2.MARKER_CROSS, 12, 2)  # Red cross
+            
+            # Draw Orientation Arrow
+            if angle_measured is not None:
+                # Note: y is subtracted because pixel coordinates increase downwards,
+                # while standard angle is counter-clockwise from positive x (Right)
+                end_x = int(pos_measured_px[0] + arrow_length * math.cos(angle_measured))
+                end_y = int(pos_measured_px[1] - arrow_length * math.sin(angle_measured))
+                cv2.arrowedLine(image_overlay, pos_measured_px, (end_x, end_y), 
+                                (0, 0, 255), 2, tipLength=0.3)
     
-    # Draw estimated position (cyan circle with cross)
+    # Draw estimated position (cyan circle with cross and arrow)
     if pos_estimated_cm[0] is not None and pos_estimated_cm[1] is not None:
         pos_estimated_px = cm_to_px(pos_estimated_cm)
         if (0 <= pos_estimated_px[0] < image.shape[1] and 
             0 <= pos_estimated_px[1] < image.shape[0]):
+            
+            # Draw Marker
             cv2.circle(image_overlay, pos_estimated_px, 8, (255, 255, 0), 2)  # Cyan circle
             cv2.drawMarker(image_overlay, pos_estimated_px, (255, 255, 0), 
-                          cv2.MARKER_CROSS, 12, 2)  # Cyan cross
+                           cv2.MARKER_CROSS, 12, 2)  # Cyan cross
+
+            # Draw Orientation Arrow
+            if angle_estimated is not None:
+                end_x = int(pos_estimated_px[0] + arrow_length * math.cos(angle_estimated))
+                end_y = int(pos_estimated_px[1] - arrow_length * math.sin(angle_estimated))
+                cv2.arrowedLine(image_overlay, pos_estimated_px, (end_x, end_y), 
+                                (255, 255, 0), 2, tipLength=0.3)
     
     # Add legend
     legend_y = 30
@@ -483,7 +508,6 @@ def update_filtering(mc):
     
     # Run the Kalman filter and UPDATE GLOBAL VARIABLES
     if mc.first_call == False:#To kick -> for testing
-        print("In first truc")
         pos_vision = (None, None, None)
     mc.pos_est, mc.P_est, mc.pos_pred = mc.ekf.extended_kalman_filter(mc.pos_est, mc.P_est, l, r, pos_vision)
     mc.first_call = False#To kick -> for testing
@@ -495,10 +519,6 @@ def update_filtering(mc):
     else:
         print("Vision - Thymio not detected")
     print(f"update_filtering - pos: ({mc.ekf.x_est[0]:.2f}, {mc.ekf.x_est[1]:.2f}), angle: {mc.ekf.x_est[2]:.3f}")
-    if robot is not None:
-        print(f"Abs angle = {robot}; Estimated angle = {mc.pos_est[2]}")
-    else:
-        print(f"Abs angle = None (not detected); Estimated angle = {mc.pos_est[2]}")
     mc.angle = mc.pos_est[2]
     return mc.pos_est, mc.P_est, mc.pos_pred
 

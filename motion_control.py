@@ -126,10 +126,8 @@ class Motion_control:
         
         if error > np.pi:
             error = error - 2 * np.pi
-            print("Wrap angle")
         if error < -np.pi:
             error = error + 2 * np.pi
-            print("Wrap angle")
         return error
 
 
