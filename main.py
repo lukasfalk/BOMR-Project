@@ -217,7 +217,7 @@ async def main():
 
         vector_path_inversed = []
 
-        v.cam_centering()
+        #v.cam_centering()
 
         while(1):
             if state == State.KIDNAPPING:
