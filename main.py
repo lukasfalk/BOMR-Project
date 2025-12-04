@@ -217,17 +217,17 @@ async def main():
                     await mc.client.sleep(0.1)
                     #empty the camera buffer
                     for idx in range(50):
-                        _ = v.get_image(v._Vision__cap, False)
+                        _ = v.get_image(False)
                     just_changed_state = False
                     print("Kidnapped during path following")
-                x,_,_ = v.get_thymio_pos(v.get_image(v._Vision__cap, False))
+                x,_,_ = v.get_thymio_pos(v.get_image(False))
                 if x != None:
                     print("Robot detected after kidnapping")
                     await mc.client.sleep(3) #wait 3 seconds for not having the hands of the user (who did the kidnapping) in the vision/wait to stabilize
 
                     #empty the camera buffer
                     for idx in range(50):
-                        _ = v.get_image(v._Vision__cap, False) 
+                        _ = v.get_image(False) 
 
                     state = State.GRID_CREATION
                     just_changed_state = True
@@ -247,7 +247,7 @@ async def main():
                     print("No path found, obstacles probably to close")
                     break
 
-                _ = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                _ = v.get_image(False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_est_tuple = v.get_thymio_pos_in_cm(frame)
                 
@@ -255,7 +255,7 @@ async def main():
                 while pos_est_tuple[0] is None or pos_est_tuple[1] is None or pos_est_tuple[2] is None:
                     print("Waiting for robot detection to initialize position...")
                     await mc.client.sleep(0.5)
-                    _ = v.get_image(v._Vision__cap, False)
+                    _ = v.get_image(False)
                     frame = v.get_cutted_frame(False, False)
                     pos_est_tuple = v.get_thymio_pos_in_cm(frame)
                 
@@ -284,7 +284,7 @@ async def main():
                     vector_path_inversed.append((norm, -angle))  # angles already in correct reference frame
 
                 if vector_path is not None:
-                    #current_image = v.get_image(v._Vision__cap, False)
+                    #current_image = v.get_image(False)
                     current_image = v.get_cutted_frame(False,False)
                     print("image size:", current_image.shape)
                 
@@ -320,10 +320,11 @@ async def main():
                 error_pos = 0
                 visualizing_counter = 0
 
-                _ = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                _ = v.get_image(False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
+                #mc.v = v#copy the init vision into the motion control instance
                 mc.set_ekf_initial_state(v.get_thymio_pos_in_cm(frame))
-                _, _, _ = update_filtering(mc)
+                _, _, _ = mc.update_filtering(v)
                 
             if state == State.GLOBAL_NAVIGATION or state == State.OBS_AVOIDED:
                 #pos_to_goal = [(30, 40), (40, 40), (50, 40), (60, 40), (70, 40), (80, 40)]
@@ -339,11 +340,11 @@ async def main():
                 # if pos_robot_vision[0] is None:#if kidnapped and it hides the   marker
                 #     print("Kidnapped during path following (due to no robot detection)")
                 #     state = State.KIDNAPPING
-                #     await mc.node.set_variables(mc.motors(0, 0))#stop the motors
+                #     await mc.node.set_variables(mc.motors(0, 0,v))#stop the motors
                 #     just_changed_state = True
                 #     continue
 
-                _ = v.get_image(v._Vision__cap, False)#empty the camera buffer
+                _ = v.get_image(False)#empty the camera buffer
                 frame = v.get_cutted_frame(False, False)
                 pos_robot_vision = v.get_thymio_pos_in_cm(frame)[:2]
 
@@ -416,7 +417,7 @@ async def main():
                     print(f"Robot at {pos_robot_est} and going to {target_pos}")
                     print(f"Step {step_count-1} (norm, angle): {next_step}")
                     #state = await mc.fsm(next_step, error_pos, state, angle_robot_est)
-                    state = await mc.fsm(next_step, error_pos, state)
+                    state = await mc.fsm(next_step, error_pos, state,v)
 
                     #Check if waypoint is passed -> if it did -> step + 1
                     if(passed_way_point(pos_robot_est, target_pos, GOAL_EPS_CM)):
@@ -431,7 +432,7 @@ async def main():
 
             if state == State.GOAL_REACHED:
                 print(f"Goal reached")
-                await mc.node.set_variables(mc.motors(0, 0))
+                await mc.node.set_variables(mc.motors(0, 0,v))
                 cv2.destroyAllWindows()  # Fermer toutes les fenêtres OpenCV
                 break
 
@@ -450,57 +451,6 @@ Check if the robot has passed the waypoint within a certain threshold.
 def passed_way_point(robot_pos, way_point, threshold_cm):
     distance = np.linalg.norm(np.subtract(robot_pos, way_point))
     return distance < threshold_cm
-
-#first_call_filter = True
-def update_filtering(mc):
-    global v
-
-    #print the difference in time between two calls
-    
-    current_time = time.time()
-    #if mc.last_time_filter is None:
-        #print("First filtering call - initializing time")
-    #else:
-    if mc.last_time_filter is not None:
-        mc.delta_t_filter = current_time - mc.last_time_filter
-        print(f"------ Time since last filtering call: {mc.delta_t_filter:.3f} seconds")
-        mc.ekf.set_Ts(mc.delta_t_filter/2)
-    mc.last_time_filter = current_time
-    
-
-    _ = v.get_image(v._Vision__cap, False)
-    frame = v.get_cutted_frame(False, False)
-    pos_vision_tuple = v.get_thymio_pos_in_cm(frame)
-    l = mc.node["motor.left.speed"]
-    r = mc.node["motor.right.speed"]
-    print(f"left = {l}; right = {r}")
-    
-    # Convert vision measurement to numpy array if valid, otherwise use None array
-    if pos_vision_tuple[0] is not None and pos_vision_tuple[1] is not None and pos_vision_tuple[2] is not None:
-        pos_vision = np.array(pos_vision_tuple)
-    else:
-        pos_vision = np.array([None, None, None])
-    
-    # Run the Kalman filter and UPDATE GLOBAL VARIABLES
-    if mc.first_call == False:#To kick -> for testing
-        print("In first truc")
-        pos_vision = (None, None, None)
-    mc.pos_est, mc.P_est, mc.pos_pred = mc.ekf.extended_kalman_filter(mc.pos_est, mc.P_est, l, r, pos_vision)
-    mc.first_call = False#To kick -> for testing
-    mc.pos_est = v.get_thymio_pos_in_cm(frame)#To kick -> for testing
-    
-    x_abs, y_abs, robot = v.get_thymio_pos_in_cm(frame)
-    if x_abs is not None and y_abs is not None and robot is not None:
-        print(f"Vision - pos: ({x_abs:.2f}, {y_abs:.2f}), angle: {robot:.3f}")
-    else:
-        print("Vision - Thymio not detected")
-    print(f"update_filtering - pos: ({mc.ekf.x_est[0]:.2f}, {mc.ekf.x_est[1]:.2f}), angle: {mc.ekf.x_est[2]:.3f}")
-    if robot is not None:
-        print(f"Abs angle = {robot}; Estimated angle = {mc.pos_est[2]}")
-    else:
-        print(f"Abs angle = None (not detected); Estimated angle = {mc.pos_est[2]}")
-    mc.angle = mc.pos_est[2]
-    return mc.pos_est, mc.P_est, mc.pos_pred
 
 if __name__ == "__main__":
         asyncio.run(main())

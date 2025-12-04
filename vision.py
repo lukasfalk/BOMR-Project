@@ -47,17 +47,6 @@ class Vision:
         #Force the orientation to 0
         self.__cap.set(cv2.CAP_PROP_ORIENTATION_META, 0) 
 
-        #Take the calibration data if it exists
-        try:
-            calib = np.load('camera_calibration.npz')
-            self.__camera_matrix = calib['camera_matrix']
-            self.__dist_coeffs = calib['dist_coeffs']
-            print("Calibration chargée avec succès")
-        except:
-            print("ATTENTION: Pas de calibration trouvée, distortion non corrigée!")
-            self.__camera_matrix = None
-            self.__dist_coeffs = None
-
         if not self.__cap.isOpened():
             raise Exception("Unable to open the camera")
         
@@ -96,10 +85,10 @@ class Vision:
     Return one frame (filtered) from the camera
     The frame is a table: (length_x, length_y, 3)
     '''
-    def get_image(self,cap,plot=False):
+    def get_image(self,plot=False):
 
         # Read one frame
-        ret, frame = cap.read()
+        ret, frame = self.__cap.read()
 
         if not ret:
             raise Exception("Unable to capture the image")
@@ -193,7 +182,7 @@ class Vision:
         for idx in range(acquisition_delay):
             _,_ = self.__cap.read()
 
-        frame = self.get_image(self.__cap,plot)
+        frame = self.get_image(plot)
 
         #Cut the frame with the aruco (to keep only the interesting zone)
         frame_cropped,self.__goal_end = self.get_frame_from_aruco(frame)
@@ -368,25 +357,23 @@ class Vision:
 
         dst_pts = np.array([[0,0],[self._w,0],[self._w,self._h],[0,self._h]], dtype="float32")
         self._M = cv2.getPerspectiveTransform(box.astype("float32"), dst_pts)
-        #Apply borderMode to reduce distortion at the edges
-        cropped_frame = cv2.warpPerspective(frame, self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
+        cropped_frame = cv2.warpPerspective(frame, self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)#Apply borderMode to reduce distortion at the edges (should not been used)
         return cropped_frame,self._M
 
     '''
     Get a cropped frame from the arucos. Either recalculate the cropping parameters or use the previous ones
-    CAUTION: If the recalculation is done -> the arucos will be replaced by white in the image (done in get_frame_from_aruco to avoid confusion during grid creation)
-    Remark: if the camera or the setup moved, it is better to recalculate the cropping parameters -> small change in code needed if you want it cleaner
+    Remark: if the camera or the setup moved, it is better to recalculate the cropping parameters
     '''
     def get_cutted_frame(self,plot=False,resample=False):
         if self._M is None or self._w is None or self._h is None or resample:
             # First time setup
             if plot:
                 print("Setting up cropping parameters...")
-            frame = self.get_image(self.__cap,plot)
-            _,_ = self.get_frame_from_aruco(frame)
-            cropped_frame = cv2.warpPerspective(self.get_image(self.__cap,plot), self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
+            frame = self.get_image(plot)
+            _,_ = self.get_frame_from_aruco(frame)#does not use this cropped frame for not having the arucos replaced by white
+            cropped_frame = cv2.warpPerspective(self.get_image(plot), self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
         else:
-            cropped_frame = cv2.warpPerspective(self.get_image(self.__cap,plot), self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
+            cropped_frame = cv2.warpPerspective(self.get_image(plot), self._M, (self._w, self._h), borderMode=cv2.BORDER_REFLECT)
 
         if plot:
             cv2.imshow("Cropped frame from get_cutted_frame", cropped_frame)
@@ -733,9 +720,9 @@ v.vision(5,90,True,1)
 
 for idx in range(10):
     print(f"Test number {idx+1}")
-    img = v.get_image(v._Vision__cap, False)
+    img = v.get_image(False)
     cv2.imshow("Debug", img)
-    x,y,theta = v.get_thymio_pos_in_cm(v.get_image(v._Vision__cap,False))
+    x,y,theta = v.get_thymio_pos_in_cm(v.get_image(False))
     print(f"Thymio position: x={x}, y={y}, theta={theta*180/np.pi} degrees")
     cv2.waitKey(0)
     cv2.destroyAllWindows()
