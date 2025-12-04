@@ -16,7 +16,7 @@ in cm:
     - y axis -> up
 in pixels:
     - x axis -> right
-    - y axis -> down
+    - y axis -> down (origin top left corner)
 
 Origin:
 top right corner -> id 2
